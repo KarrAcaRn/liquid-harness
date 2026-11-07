@@ -1,0 +1,12 @@
+[package]
+name = "lh-tools-fs"
+autotests = false
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+lh-plugin-sdk.workspace = true
+serde_json.workspace = true
+regex = "1"
+globset = "0.4"
+ignore = "0.4"

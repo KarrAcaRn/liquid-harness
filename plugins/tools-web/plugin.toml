@@ -1,0 +1,19 @@
+[plugin]
+id = "tools-web"
+version = "0.1.0"
+protocol = 1
+description = "Web search and readable HTTP content with network isolation"
+provides = ["tool"]
+
+[run]
+command = "lh-tools-web"
+args = []
+
+[config]
+provider = "duckduckgo"
+timeout_secs = 15
+max_bytes = 1048576
+allow_private_network = false
+# SearXNG: provider = "searxng", base_url = "https://search.example/"
+# Brave: provider = "brave", api_key_env = "BRAVE_SEARCH_API_KEY"
+# base_url is only supported for SearXNG; redirects and proxies are disabled.

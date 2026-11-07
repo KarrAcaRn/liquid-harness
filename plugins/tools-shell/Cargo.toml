@@ -1,0 +1,13 @@
+[package]
+name = "lh-tools-shell"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lh-plugin-sdk.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex = "1"
+libc = "0.2"

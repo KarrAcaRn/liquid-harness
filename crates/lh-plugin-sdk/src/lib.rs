@@ -2,6 +2,8 @@
 //! protocol traffic. Cancellation cannot interrupt a running blocking handler;
 //! unknown notifications (including `$/cancel`) are ignored. Shutdown is honored
 //! between calls, without a response.
+pub mod mcp;
+
 use lh_protocol::{
     Notification, Request, Response, RpcError,
     json::{self, Value},

@@ -1,0 +1,23 @@
+[plugin]
+id = "tools-fs"
+version = "0.1.0"
+protocol = 1
+description = "Workspace-confined filesystem MCP tools"
+provides = ["tool"]
+
+[run]
+command = "lh-tools-fs"
+args = []
+
+[config]
+# Relative tool paths only. Defaults to the process working directory.
+workspace_root = "."
+allow_secrets = false
+
+# All symlinks are rejected, including symlinks inside the workspace.
+# Component checks are not a sandbox against concurrent filesystem mutation:
+# a hostile process can race checks and opens. Use OS isolation for that threat.
+# Hard links and mount points are not identified as escapes.
+# Searches honor .gitignore (even outside a Git repository) and skip .git,
+# target, node_modules, secrets and symlinks. Explicit reads ignore .gitignore.
+# Files are limited to 8 MiB; responses to 64 KiB; search visits to 10,000.

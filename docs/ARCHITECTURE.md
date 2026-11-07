@@ -1,6 +1,6 @@
 # liquid-harness – Architecture
 
-Status: M2 through M3b implemented (llama.cpp and opt-in FreeToken backends,
+Status: M2 through M3b and M4a implemented (llama.cpp and opt-in FreeToken backends,
 capability-aware fallback, routing cascade, sessions, evaluation, audio ASR/TTS,
 conversation REPL and OpenAI-compatible HTTP subset).
 Later milestone sections remain the design contract.
@@ -217,6 +217,20 @@ M1 transport details:
 - Errors: JSON-RPC error codes; `-32001` model not available, `-32002` backend
   overloaded, `-32003` unsupported modality, `-32004` cancelled.
 - Tool plugins are plain **MCP servers** (stdio). We do not invent a tool protocol.
+
+M4a ships `lh-tools-fs`, `lh-tools-shell`, and `lh-tools-web` as independent
+MCP **2025-03-26** servers using `lh-plugin-sdk::mcp`, not the backend handshake.
+They implement initialize/initialized, ping, tools/list and tools/call with
+JSON input schemas, text/isError results, and destructive annotations. Trusted
+configuration comes from `LH_TOOL_CONFIG` JSON and optional initialize `config`
+overrides. Workspace roots default to the inherited cwd; the future MCP host
+must preserve the caller's cwd or pass an explicit root. Calls are serial;
+close stdin for shutdown. Host execution/approval and agent loops remain M4b.
+Filesystem guards reject traversal, symlinks and common secret filenames but
+are not an atomic filesystem sandbox. Shell runs in its own process group with
+bounded output/deadlines, not permission isolation. Web uses ureq with validated
+connection DNS addresses, no proxies/redirects, and public destinations by default.
+Contracts, configuration, limitations and smoke evidence: [tools](tools.md).
 
 ## 5. Routing (the core)
 
@@ -443,7 +457,8 @@ Request ─► 1. explicit? ──yes──► specialist by id/alias
 crates/lh-protocol    JSON-RPC envelopes, manifest structs, DTOs (chat, decide, route).
                       Depends on serde/serde_json/toml only. No async.
 crates/lh-plugin-sdk  Write Rust plugins in ~30 lines: blocking stdio loop, method
-                      dispatch, stream/log helpers. std + lh-protocol only.
+                      dispatch, stream/log helpers; separate MCP tools transport.
+                      std + lh-protocol only.
 crates/lh-core        Plugin discovery + host (tokio process/io), registry, router
                       engine, orchestrator, config. No HTTP.
 crates/lh-cli         Binary `lh`: run, models pull, eval routing, chat REPL and HTTP/1
@@ -457,6 +472,9 @@ plugins/mock-backend  Deterministic backend (Unicode echo/three stream chunks,
                       decide via case-insensitive word overlap, with normalized scores).
 tests/fixtures/mock-pack  Explicitly loaded offline specialists and mock-router fixture.
 plugins/lfm3          Manifest-only specialist + router pack.
+plugins/tools-fs      MCP confined-path UTF-8 read/write/edit/list/search tools.
+plugins/tools-shell   MCP approved-by-host shell commands, group kill and output cap.
+plugins/tools-web     MCP search providers and bounded public HTTP text fetching.
 ```
 
 Dependency policy: every new dependency needs a one-line reason in the PR/commit.
@@ -612,3 +630,5 @@ accuracy, smoke output, limitations and raw measurements: [M2-RESULTS.md](M2-RES
   audio protocol and CLI, fake/offline tests and bilingual real smoke.
 - **M4 – Extended audio & tools:** realtime audio, d1-Omni router, MCP tool plugins with the
   LFM3-1.7B agent loop.
+- **M4a – Developer tool plugins:** standalone filesystem, shell and web MCP
+  servers; offline tests and stdio smoke. Agent/MCP host/approvals follow in M4b.
