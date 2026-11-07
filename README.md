@@ -11,8 +11,9 @@ Everything is a plugin: inference backends, specialist models, routers and tools
 Plugins are separate processes speaking JSON-RPC over stdio, so they can be written in any
 language and a crashing plugin never takes the harness down.
 
-Status: M3b implemented: llama.cpp backend, streamed text/image answers, ASR/TTS,
-model pull, routing cascade/evaluation, conversation REPL and HTTP serving –
+Status: M4b implemented: llama.cpp backend, streamed text/image answers, ASR/TTS,
+model pull, routing cascade/evaluation, conversation REPL, MCP tools, bounded agent
+runs with approvals/skills, and HTTP serving/management –
 see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Try the offline routing core
@@ -81,8 +82,28 @@ lh eval routing --file "$repo/evals/routing-heldout.jsonl"
 
 HF sources may download weights; `models pull` verifies model readiness then
 shuts down. `lh run` supports chat, transcription and speech synthesis.
-Default pack chat completions cap at 256 tokens with thinking disabled;
+Text agent completions cap at 1024 tokens per step (vision at 256), thinking disabled;
 edit specialist `params` for a larger budget. Explicit model selection skips d1.
+
+### Agent tools
+
+The text specialist executes filesystem, shell and web tools in `lh run` and
+`lh chat`, with a 20-step limit and approval prompts for writes/edits/commands.
+Run from the intended workspace, not a directory containing sensitive files.
+When outside this checkout, set `LH_PLUGIN_PATH="$repo/plugins"` and
+`LH_SKILL_PATH="$repo/skills"`. The tools are not an OS sandbox.
+
+```sh
+lh run --model lfm3-text "Read the failing test, fix the code and run the test."
+lh chat --model lfm3-text
+```
+
+Configuration `[agent] approval="auto-edit"` permits file edits but still asks
+for commands; `"yolo"` permits all tools. Default `"ask"` denies unanswered and
+noninteractive approvals. The HTTP host-execution endpoint is
+`POST /lh/v1/agent/runs`; OpenAI chat retains client-owned tool execution.
+See [tools/API contracts](docs/tools.md), [skills](docs/skills.md), and
+[measured agent results and limitations](docs/M4B-RESULTS.md).
 
 ### Audio
 

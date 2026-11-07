@@ -95,6 +95,10 @@ pub struct Run {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Specialist {
+    #[serde(default)]
+    pub agent: bool,
+    #[serde(default)]
+    pub tools: Vec<String>,
     /// Required request modalities (text, image, audio), beyond supported inputs.
     #[serde(default)]
     pub requires: Vec<String>,

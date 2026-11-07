@@ -20,7 +20,9 @@ use tokio::{
 const MAX_FRAME: usize = 8 * 1024 * 1024;
 type Reply = oneshot::Sender<Result<Value>>;
 enum CommandMessage {
+    Reset(oneshot::Sender<()>),
     Call(String, Value, Reply),
+    Status(Reply),
     Shutdown(oneshot::Sender<()>),
 }
 #[derive(Clone)]
@@ -60,6 +62,22 @@ impl Host {
     pub async fn capabilities(&self) -> Result<Value> {
         self.call("host/capabilities", Value::Null).await
     }
+    /// Inspect this host without initializing or restarting its process.
+    pub async fn status(&self) -> Result<Value> {
+        let (tx, rx) = oneshot::channel();
+        self.tx
+            .send(CommandMessage::Status(tx))
+            .await
+            .map_err(|_| Error::new(-32603, "plugin host closed"))?;
+        rx.await
+            .map_err(|_| Error::new(-32603, "plugin host closed"))?
+    }
+    pub async fn reset(&self) {
+        let (tx, rx) = oneshot::channel();
+        if self.tx.send(CommandMessage::Reset(tx)).await.is_ok() {
+            let _ = rx.await;
+        }
+    }
     pub async fn shutdown(&self) {
         let (tx, rx) = oneshot::channel();
         if self.tx.send(CommandMessage::Shutdown(tx)).await.is_ok() {
@@ -68,6 +86,7 @@ impl Host {
     }
 }
 struct Process {
+    mcp: bool,
     capabilities: Vec<String>,
     child: Child,
     stdin: mpsc::Sender<Vec<u8>>,
@@ -90,7 +109,12 @@ impl Process {
     }
     async fn stop(mut self) {
         // Give a cooperative plugin a short grace period, then kill and reap it.
-        let _ = self.send(json!({"jsonrpc":"2.0","method":"shutdown"}));
+        if self.mcp {
+            // MCP has no shutdown method. Dropping the ordered writer closes stdin.
+            self.writer.abort();
+        } else {
+            let _ = self.send(json!({"jsonrpc":"2.0","method":"shutdown"}));
+        }
         if tokio::time::timeout(Duration::from_millis(200), self.child.wait())
             .await
             .is_err()
@@ -189,6 +213,7 @@ async fn spawn(entry: &Entry, config: &BTreeMap<String, Value>) -> Result<Proces
         }
     });
     let mut process = Process {
+        mcp: entry.manifest.plugin.provides.iter().any(|p| p == "tool"),
         capabilities: vec![],
         child,
         stdin,
@@ -201,7 +226,14 @@ async fn spawn(entry: &Entry, config: &BTreeMap<String, Value>) -> Result<Proces
     merged.extend(config.clone());
     // Reserved host setting, not part of the plugin-owned configuration.
     merged.remove("host_timeout_secs");
-    if let Err(e) = process.send(json::to_value(Request::new(0, "initialize", json!({"protocol":1,"plugin_id":entry.manifest.plugin.id,"config":merged,"core_version":env!("CARGO_PKG_VERSION")})))?) {
+    let params = if process.mcp {
+        json!({"protocolVersion":"2025-03-26", "capabilities":{},
+            "clientInfo":{"name":"liquid-harness","version":env!("CARGO_PKG_VERSION")},
+            "config":merged})
+    } else {
+        json!({"protocol":1,"plugin_id":entry.manifest.plugin.id,"config":merged,"core_version":env!("CARGO_PKG_VERSION")})
+    };
+    if let Err(e) = process.send(json::to_value(Request::new(0, "initialize", params))?) {
         process.stop().await;
         return Err(e);
     }
@@ -232,6 +264,24 @@ async fn initialize(
         let result = r
             .result
             .ok_or_else(|| Error::new(-32603, "initialize rejected"))?;
+        if process.mcp {
+            if r.id != 0
+                || result["protocolVersion"] != "2025-03-26"
+                || !result["serverInfo"]["name"].is_string()
+                || !result["serverInfo"]["version"].is_string()
+                || !result["capabilities"].is_object()
+            {
+                return Err(Error::new(-32603, "invalid MCP initialize handshake"));
+            }
+            process.capabilities = result["capabilities"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect();
+            process.send(json!({"jsonrpc":"2.0","method":"notifications/initialized"}))?;
+            return Ok(());
+        }
         if r.id != 0
             || !result["name"].is_string()
             || !result["version"].is_string()
@@ -282,7 +332,7 @@ async fn actor(
     let mut process: Option<Process> = None;
     let mut pending: BTreeMap<u64, (Instant, Reply)> = BTreeMap::new();
     let mut next_id = 1;
-    let mut starts = 0;
+    let mut starts: u64 = 0;
     let mut restarts = VecDeque::new();
     let mut tick = tokio::time::interval(Duration::from_millis(25));
     loop {
@@ -290,6 +340,21 @@ async fn actor(
         tokio::select! {
             cmd = rx.recv() => match cmd {
                 None => break,
+                Some(CommandMessage::Reset(reply)) => {
+                    for (_, (_, waiting)) in std::mem::take(&mut pending) {
+                        let _ = waiting.send(Err(Error::new(-32004, "plugin generation cancelled")));
+                    }
+                    if let Some(p) = process.take() { p.stop().await; }
+                    let _ = reply.send(());
+                    continue;
+                }
+                Some(CommandMessage::Status(reply)) => {
+                    let pid = process.as_mut().and_then(|p| {
+                        matches!(p.child.try_wait(), Ok(None)).then(|| p.child.id()).flatten()
+                    });
+                    let state = if pid.is_some() { "running" } else if starts == 0 { "not_started" } else { "failed" };
+                    let _ = reply.send(Ok(json!({"state":state,"pid":pid,"restarts":starts.saturating_sub(1)})));
+                }
                 Some(CommandMessage::Shutdown(reply)) => {
                     if let Some(p) = process.take() { p.stop().await; }
                     let _ = reply.send(());
@@ -394,5 +459,127 @@ async fn actor(
     }
     if let Some(p) = process {
         p.stop().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MCP: &str = r#"
+import json, os, sys, time
+initialized = False
+config = {}
+for line in sys.stdin:
+    r = json.loads(line)
+    method = r['method']
+    if method == 'initialize':
+        assert r['params']['protocolVersion'] == '2025-03-26'
+        assert r['params']['capabilities'] == {}
+        assert r['params']['clientInfo']['name'] == 'liquid-harness'
+        config = r['params']['config']
+        assert 'host_timeout_secs' not in config
+        result = {'protocolVersion':'2025-03-26','serverInfo':{'name':'test','version':'1'},'capabilities':{'tools':{}}}
+    elif method == 'notifications/initialized':
+        assert 'id' not in r
+        initialized = True
+        continue
+    else:
+        assert initialized
+        assert method != 'shutdown'
+        if method == 'crash':
+            sys.exit(2)
+        if method == 'hang':
+            time.sleep(10)
+        result = {'cwd':os.getcwd(),'config':config,'params':r.get('params')}
+    print(json.dumps({'jsonrpc':'2.0','id':r['id'],'result':result}), flush=True)
+if 'eof_marker' in config:
+    with open(config['eof_marker'], 'w') as f:
+        f.write('EOF')
+"#;
+
+    fn entry(script: &str) -> Entry {
+        let mut manifest: lh_protocol::Manifest = lh_protocol::toml::from_str(
+            r#"
+[plugin]
+id = "test-mcp"
+version = "1"
+protocol = 1
+provides = ["tool"]
+[run]
+command = "python3"
+"#,
+        )
+        .unwrap();
+        manifest.run.as_mut().unwrap().args = vec!["-u".into(), "-c".into(), script.into()];
+        Entry {
+            path: std::env::temp_dir().join("nonexistent-plugin/plugin.toml"),
+            manifest,
+        }
+    }
+
+    #[tokio::test]
+    async fn mcp_lifecycle_status_cwd_config_and_eof() {
+        let marker = std::env::temp_dir().join(format!("lh-mcp-eof-{}", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        let host = Host::new(
+            entry(MCP),
+            BTreeMap::from([
+                ("eof_marker".into(), json!(marker)),
+                ("host_timeout_secs".into(), json!(2)),
+            ]),
+        );
+        assert_eq!(
+            host.status().await.unwrap(),
+            json!({"state":"not_started","pid":null,"restarts":0})
+        );
+        assert_eq!(host.capabilities().await.unwrap(), json!(["tools"]));
+        let result = host.call("echo", json!({"hello":true})).await.unwrap();
+        assert_eq!(result["cwd"], json!(std::env::current_dir().unwrap()));
+        assert_eq!(result["params"], json!({"hello":true}));
+        let status = host.status().await.unwrap();
+        assert_eq!(status["state"], "running");
+        assert!(status["pid"].is_u64());
+        host.shutdown().await;
+        assert_eq!(std::fs::read_to_string(&marker).unwrap(), "EOF");
+        std::fs::remove_file(marker).unwrap();
+    }
+
+    #[tokio::test]
+    async fn mcp_crash_restart_budget_and_timeout() {
+        let host = Host::with_timeout(entry(MCP), BTreeMap::new(), Duration::from_secs(1));
+        assert!(
+            host.call("hang", json!({}))
+                .await
+                .unwrap_err()
+                .message
+                .contains("timed out")
+        );
+        for _ in 0..3 {
+            assert!(host.call("crash", json!({})).await.is_err());
+        }
+        let error = host.call("echo", json!({})).await.unwrap_err();
+        assert!(error.message.contains("restart limit"));
+        let status = host.status().await.unwrap();
+        assert_eq!(status["restarts"], 3);
+        assert_eq!(status["state"], "failed");
+        host.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn mcp_rejects_incompatible_version() {
+        let script = MCP.replace(
+            "'protocolVersion':'2025-03-26'",
+            "'protocolVersion':'invalid'",
+        );
+        let host = Host::new(entry(&script), BTreeMap::new());
+        assert!(
+            host.capabilities()
+                .await
+                .unwrap_err()
+                .message
+                .contains("invalid MCP")
+        );
+        host.shutdown().await;
     }
 }

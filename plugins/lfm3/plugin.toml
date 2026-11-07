@@ -7,15 +7,17 @@ provides = ["specialist", "router"]
 
 [[specialist]]
 id = "lfm3-text"
+agent = true
+tools = ["tools-fs", "tools-shell", "tools-web"]
 route = "General text conversation, questions, writing, reasoning, coding, planning and tool tasks. Also explaining images or audio in general when no media analysis is requested."
 task = "chat"
 inputs = ["text"]
 outputs = ["text", "tool_calls"]
 backends = [
   { backend = "freetoken", model = { source = "hf:LiquidAI/LFM3-1.7B-NVFP4" } },
-  { backend = "llamacpp", model = { source = "hf:LiquidAI/LFM3-1.7B-GGUF:Q4_K_M", ctx = 4096, threads = 8 } },
+  { backend = "llamacpp", model = { source = "hf:LiquidAI/LFM3-1.7B-GGUF:Q4_K_M", ctx = 32768, threads = 8 } },
 ]
-params = { temperature = 0.3, top_p = 0.9, max_tokens = 256, chat_template_kwargs = { enable_thinking = false } }
+params = { temperature = 0.3, top_p = 0.9, max_tokens = 1024, chat_template_kwargs = { enable_thinking = false } }
 
 [[specialist]]
 id = "lfm3-vl"

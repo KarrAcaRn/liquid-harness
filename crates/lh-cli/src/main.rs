@@ -1,3 +1,4 @@
+mod agent_ui;
 mod conversation;
 mod inference;
 mod repl;

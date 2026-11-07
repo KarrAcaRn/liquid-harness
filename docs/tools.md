@@ -1,9 +1,9 @@
-# Developer tool plugins (M4a)
+# Developer tools and agent host (M4a/M4b)
 
 Three standalone MCP stdio executables ship in `plugins/tools-{fs,shell,web}`.
 Build with `cargo build --workspace`; install the binaries beside `lh` or on PATH.
-Their manifests advertise `provides = ["tool"]`. M4a does not change `lh-core`:
-agent execution, the MCP client, and approval prompts belong to M4b. Do not send
+Their manifests advertise `provides = ["tool"]`. M4b adds the MCP client,
+bounded agent execution and approval prompts in `lh-core`/`lh-cli`. Do not send
 these servers the backend's `{protocol:1,...}` initialize handshake.
 
 ## Wire protocol and configuration
@@ -21,8 +21,8 @@ Standard MCP clients can launch with `LH_TOOL_CONFIG` containing a JSON object.
 For the harness, `initialize.params.config` is an optional plugin configuration
 extension: it shallowly overrides that environment object. Omit both for defaults.
 Configuration must come from the trusted host, not from model tool arguments.
-`workspace_root` defaults to the server's inherited cwd: the future MCP host must
-inherit the cwd of `lh` or explicitly send its workspace root, not the plugin dir.
+`workspace_root` defaults to the server's inherited cwd: the MCP host inherits
+the cwd of `lh`, not the plugin dir; trusted config may override the root.
 Manifests' `[config]` values must be supplied by the host; standalone binaries do
 not read TOML themselves.
 
@@ -170,6 +170,99 @@ average before/after was 4.22/4.79/4.63. No inference, latency or throughput was
 measured. Tests include confinement/secrets/symlinks, exact edits, output/search
 caps, process-group timeout, open-pipe descendants, proxy avoidance and HTTP errors.
 
-Known gaps are the explicit trust/race/process boundaries above, serial
-non-cancellable MCP dispatch, limited HTML extraction, and no host/agent approval
-UI until M4b. No HTTP/inference dependency or agent-loop change was added to core.
+Known gaps include the trust/race/process boundaries above, serial MCP dispatch
+and limited HTML extraction. M4b can terminate a tool plugin on cancel/timeout,
+but cannot roll back effects or guarantee cleanup of escaped shell descendants.
+Core still has no HTTP client or inference dependency.
+
+## M4b host policy
+
+Specialist `tools` accepts plugin IDs or individual tool names. Collisions become
+`plugin__tool`; colliding built-in skill names are also qualified. Missing
+selectors fail rather than silently broaden permission. Annotation defaults
+are conservative: tools not explicitly non-destructive/read-only need approval.
+Only install trusted plugins: annotations are plugin claims, not code analysis.
+
+Configuration defaults:
+
+```toml
+[agent]
+approval = "ask" # ask | auto-edit | yolo
+command_allow = []
+max_steps = 20
+tool_timeout_secs = 120
+approval_timeout_secs = 60
+output_budget_bytes = 65536
+context_tool_bytes = 16384
+```
+
+`auto-edit` only permits `tools-fs` write_file/edit_file automatically; commands
+still ask. `command_allow` matches the entire raw command, with `*` matching any
+bytes (including shell operators). Prefer exact strings such as `git status`.
+`cargo test*` also permits a trailing `; ...`: patterns are convenience, NOT a
+sandbox. Modes and patterns are trusted configuration, never request overrides.
+`always` only remembers identical plugin/tool/arguments during one run.
+CLI asks y/n/always on its controlling terminal; noninteractive requests deny
+unless configured for automatic execution. Pending prompts expire to denial.
+
+### HTTP agent contract
+
+All endpoints inherit bearer authentication, localhost default, JSON body limit
+and no CORS policy from `lh serve`. `POST /lh/v1/agent/runs` accepts only
+`{"model":"auto","messages":[{"role":"user","content":"..."}]}`. Selection must
+resolve to an agent-enabled chat specialist. Routing/load errors precede SSE;
+successful response has `Content-Type: text/event-stream` and `x-lh-run-id`.
+SSE `event:` names match JSON `event`; JSON is `{event,data,run_id}`:
+
+| Event | `data` |
+|---|---|
+| route | Complete loaded RouteDecision |
+| delta | `{content,step}`; text deltas only |
+| tool_call | `{call_id,name,arguments,step}`; validated complete call |
+| approval_required | Same call fields; no effect performed yet |
+| tool_result | `{call_id,result,step}`; result is serialized JSON text, possibly visibly truncated |
+| error | `{code,message}` |
+| done | `{response,steps}` on success, `{error}` on failure |
+
+`response` contains backend message/usage/finish_reason, steps, and `lh_messages`
+(retained history including tool exchanges, excluding the final answer and the
+injected skill index). Append `response.message` before the next turn.
+`POST /lh/v1/agent/runs/{id}/approve` requires `{call_id,allow}` and optional
+boolean `always`. Unknown/completed run: 404; expired/duplicate approval: 409.
+`POST /lh/v1/agent/runs/{id}/cancel {}` requests cancellation. A completed run
+is removed; there is no durable run storage or event reconnection/replay.
+Disconnected/slow (>5s blocked send) SSE clients cancel; inference still drains.
+One run owns the engine at a time. New agent runs and management reads return
+409 while busy, rather than waiting behind an unanswered approval. Approval and
+cancel endpoints never acquire that lock. Routing/model load happens before the
+run ID exists and cannot be cancelled through this endpoint.
+`/v1/chat/completions` intentionally does not execute local tools.
+
+### Read-only management JSON
+
+| GET path | Shape |
+|---|---|
+| /lh/v1/plugins | `{plugins:[{id,version,description,provides,capabilities,capabilities_source:"manifest",enabled,manifest_path,process}]}` |
+| /lh/v1/specialists | `{specialists:[Specialist]}` including tools/agent, hints, requires and backend choices |
+| /lh/v1/router | `{selected,routers:[Router],cascade:CascadeConfig,stats}` |
+| /lh/v1/tools | `{tools:[{name,plugin,original_name,description,input_schema,destructive}],builtins:[OpenAI tool schema]}` |
+| /lh/v1/skills | `{skills:[{name,description,tools}]}` |
+| /lh/v1/skills/{name} | `{name,description,tools,content}`; Markdown body, 404 if absent |
+| /lh/v1/status | `{processes:{plugin_id:process},resident_models:[{backend,loaded}],cascade:stats}` |
+
+`process` is `{state:"not_started|running|failed",pid:null|number,restarts:number}`;
+restarts counts lifetime attempts, not just the rolling limit. Declarative and
+disabled plugins appear as not_started. `stats` has `model_calls`, winning
+`stage_counts`, and the last 32 `recent_routes` (no raw user prompts).
+Resident entries use backend-owned `loaded` arrays (`key,pid,port,idle_secs` for
+llama.cpp); failed backend status reads have `{backend,error}`. Status does not
+load a model; `/tools` lazily starts MCP plugins to obtain authoritative schemas.
+Configuration maps and environment values are never returned.
+
+### M4b verification
+
+After `cargo build --offline --workspace`, run
+`python3 scripts/agent-smoke.py --out /path/to/results` for offline HTTP policy
+checks using scripted mock replies and actual filesystem tools. `--real` runs
+two sequential cached LFM3 cases; it refuses an already running llama-server.
+See [M4B-RESULTS.md](M4B-RESULTS.md) for real results and explicit limitations.

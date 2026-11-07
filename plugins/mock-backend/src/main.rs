@@ -103,6 +103,16 @@ impl Handler for Mock {
                     let messages = params["messages"]
                         .as_array()
                         .ok_or_else(|| error("missing messages"))?;
+                    if let Some(script) = self.config["scripted_chat"].as_array() {
+                        let step = messages.iter().filter(|m| m["role"] == "assistant").count();
+                        let message = script
+                            .get(step)
+                            .cloned()
+                            .unwrap_or(json!({"role":"assistant","content":"Script complete"}));
+                        return Ok(
+                            json!({"finish_reason":if message["tool_calls"].is_array() {"tool_calls"} else {"stop"},"message":message,"usage":{}}),
+                        );
+                    }
                     let content = messages
                         .iter()
                         .rev()

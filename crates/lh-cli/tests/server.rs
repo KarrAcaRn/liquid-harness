@@ -457,6 +457,16 @@ fn endpoints_stream_multipart_and_media_validation() {
 fn bearer_auth_protects_every_endpoint() {
     let server = Server::start(true);
     for path in [
+        "/lh/v1/plugins",
+        "/lh/v1/specialists",
+        "/lh/v1/router",
+        "/lh/v1/tools",
+        "/lh/v1/skills",
+        "/lh/v1/skills/coding",
+        "/lh/v1/status",
+        "/lh/v1/agent/runs",
+        "/lh/v1/agent/runs/id/approve",
+        "/lh/v1/agent/runs/id/cancel",
         "/v1/models",
         "/v1/chat/completions",
         "/v1/audio/transcriptions",

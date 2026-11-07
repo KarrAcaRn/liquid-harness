@@ -1,8 +1,9 @@
 # liquid-harness – Architecture
 
-Status: M2 through M3b and M4a implemented (llama.cpp and opt-in FreeToken backends,
+Status: M2 through M4b implemented (llama.cpp and opt-in FreeToken backends,
 capability-aware fallback, routing cascade, sessions, evaluation, audio ASR/TTS,
-conversation REPL and OpenAI-compatible HTTP subset).
+conversation REPL, OpenAI-compatible HTTP subset, bounded agent runs, MCP host,
+approvals, skills and management APIs).
 Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
@@ -223,9 +224,11 @@ MCP **2025-03-26** servers using `lh-plugin-sdk::mcp`, not the backend handshake
 They implement initialize/initialized, ping, tools/list and tools/call with
 JSON input schemas, text/isError results, and destructive annotations. Trusted
 configuration comes from `LH_TOOL_CONFIG` JSON and optional initialize `config`
-overrides. Workspace roots default to the inherited cwd; the future MCP host
-must preserve the caller's cwd or pass an explicit root. Calls are serial;
-close stdin for shutdown. Host execution/approval and agent loops remain M4b.
+overrides. Workspace roots default to the inherited cwd, preserved by the MCP host.
+Calls are serial; close stdin for shutdown. M4b reuses the process host with a
+separate MCP handshake; failed calls are never replayed. Tool discovery is lazy
+on first agent/tools-list request, names are qualified on collisions, and host
+policy gates destructive calls before dispatch. Detailed contracts below.
 Filesystem guards reject traversal, symlinks and common secret filenames but
 are not an atomic filesystem sandbox. Shell runs in its own process group with
 bounded output/deadlines, not permission isolation. Web uses ureq with validated
@@ -351,7 +354,8 @@ The LFM3 pack enables text-only d1 routing: image/audio attachments select their
 sole compatible specialist without loading d1 or a router projector. Audio
 transcription uses the audio projector and a greedy ASR system prompt.
 LFM3 chat disables thinking by default to avoid an invisible reasoning-only
-answer exhausting the short completion budget (256 tokens, overridable in pack).
+answer exhausting the completion budget (text agent: 1024 tokens per step;
+vision: 256 tokens, overridable in the pack).
 
 ### M3a audio execution
 
@@ -549,6 +553,43 @@ with transcript text in the REPL history. HTTP clients resending audio incur
 transcription again. No automatic context truncation/summarization is performed.
 
 ## 9. Configuration
+### Agent execution and management (M4b)
+
+Specialists opt in with `agent = true` or nonempty `tools = [...]`. Selectors
+are plugin IDs, original tool names or collision-qualified `plugin__tool` names;
+empty selection with `agent=true` means all enabled MCP tools. Discovery lists
+all enabled tool plugins for a stable collision namespace; unrelated tools are
+then filtered before exposure. Built-in `skills_list`/`skill_view` names are reserved.
+`lh run` and `lh chat` execute the loop. The OpenAI `/v1/chat/completions` adapter
+remains client-owned tool execution, avoiding unexpected local side effects;
+use the explicit `/lh/v1/agent/runs` endpoint for host execution.
+
+Each run routes/loads once, adds a compact skill index, sends OpenAI tool schemas,
+validates a complete assistant call batch, executes sequentially, appends
+`role:tool` results with `tool_call_id`, and repeats. Text deltas stream live;
+tool-call events are emitted only after the entire batch validates. Limits:
+20 model steps, 32 calls per batch, 120 seconds per tool, 64 KiB cumulative
+serialized tool output and 16 KiB retained tool context by default. UTF-8
+truncation is visible; old tool bodies are trimmed newest-first without removing
+call IDs. User/assistant history and schemas are not token-trimmed; very long
+conversations can still exceed context. The shipped text pack uses 32K ctx.
+
+`[agent] approval="ask"` is default; `auto-edit` only auto-approves filesystem
+write/edit, `yolo` auto-approves everything. Anchored `command_allow` patterns
+have only `*` wildcard syntax and are not shell isolation. Unanswered approvals
+deny after 60 seconds. CLI prompts use a nonblocking controlling tty; piped stdin
+does not approve. `always` remembers only identical tool/argument requests in
+the current run. HTTP control state is separate from the engine mutex, so approve
+and cancel work while inference is locked. Active inference drains before cancel
+returns an error; tool cancellation/timeout resets its process generation and
+retains restart accounting. Side effects already performed cannot be undone.
+
+Skills live in trusted local search paths and have a deliberately limited YAML
+frontmatter parser, with no new dependency. See [skills](skills.md).
+The authenticated management JSON and agent SSE contracts, concurrency behavior,
+configuration defaults and security limitations are in [tools](tools.md).
+Real-model evidence and prompt overhead: [M4b results](M4B-RESULTS.md).
+
 
 `$XDG_CONFIG_HOME/liquid-harness/config.toml` (overridable with `--config`/`LH_CONFIG`):
 
@@ -631,4 +672,6 @@ accuracy, smoke output, limitations and raw measurements: [M2-RESULTS.md](M2-RES
 - **M4 – Extended audio & tools:** realtime audio, d1-Omni router, MCP tool plugins with the
   LFM3-1.7B agent loop.
 - **M4a – Developer tool plugins:** standalone filesystem, shell and web MCP
-  servers; offline tests and stdio smoke. Agent/MCP host/approvals follow in M4b.
+  servers; offline tests and stdio smoke.
+- **M4b – Agent host:** MCP client, bounded tool loop, approvals, local skills,
+  CLI prompts and HTTP agent/control/management APIs; offline and real-model smoke.

@@ -45,15 +45,15 @@ pub async fn run(engine: &mut Engine, mut model: String) -> Result<()> {
     let mut last: Option<RouteDecision> = None;
     let interactive = io::stdin().is_terminal();
     // Reading a line is intentionally blocking only while no inference is active.
-    let stdin = io::stdin();
-    let mut lines = stdin.lock().lines();
     loop {
         if interactive {
             print!("lh> ");
             io::stdout().flush()?;
         }
-        let Some(line) = lines.next() else { break };
-        let line = line?;
+        let mut line = String::new();
+        if io::stdin().lock().read_line(&mut line)? == 0 {
+            break;
+        }
         let command = match parse(&line) {
             Ok(c) => c,
             Err(e) => {
@@ -109,18 +109,23 @@ pub async fn run(engine: &mut Engine, mut model: String) -> Result<()> {
                 let mut messages = history.clone();
                 messages.push(json!({"role":"user","content":parts}));
                 let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-                let call = crate::conversation::complete(
+                let (events, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+                let control = std::sync::Arc::new(lh_core::agent::Control::default());
+                let timeout = engine.config.agent.approval_timeout_secs;
+                let call = crate::conversation::complete_control(
                     engine,
                     messages,
                     &model,
                     Some(&mut session),
                     json!({}),
                     Some(tx),
+                    Some((control.clone(), events)),
                 );
                 tokio::pin!(call);
                 let result = loop {
                     tokio::select! {
                         biased;
+                        Some(event)=event_rx.recv()=>crate::agent_ui::event(event,&control,timeout).await?,
                         delta = rx.recv(), if !rx.is_closed() || !rx.is_empty() => if let Some(delta) = delta {
                             if let Some(text) = delta["content"].as_str() { print!("{text}"); io::stdout().flush()?; }
                             if let Some(tools) = delta.get("tool_calls") { eprintln!("tool_calls: {tools}"); }
@@ -128,6 +133,9 @@ pub async fn run(engine: &mut Engine, mut model: String) -> Result<()> {
                         result = &mut call => break result,
                     }
                 };
+                while let Ok(event) = event_rx.try_recv() {
+                    crate::agent_ui::event(event, &control, timeout).await?;
+                }
                 while let Ok(delta) = rx.try_recv() {
                     if let Some(text) = delta["content"].as_str() {
                         print!("{text}");

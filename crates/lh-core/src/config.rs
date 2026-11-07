@@ -37,6 +37,9 @@ use std::{
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub agent: crate::agent::AgentConfig,
+    #[serde(skip)]
+    pub directory: PathBuf,
     pub server_token_env: Option<String>,
     pub cascade: CascadeConfig,
     pub default_specialist: String,
@@ -47,6 +50,8 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            agent: crate::agent::AgentConfig::default(),
+            directory: Self::directory().unwrap_or_else(|_| PathBuf::from(".")),
             cascade: CascadeConfig::default(),
             server_token_env: None,
             default_specialist: "lfm3-text".into(),
@@ -93,6 +98,8 @@ impl Config {
                 *p = directory.join(&*p);
             }
         }
+        config.directory = directory.clone();
+        config.agent.validate()?;
         Ok((config, directory))
     }
 }

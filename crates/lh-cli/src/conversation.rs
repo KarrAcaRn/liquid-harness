@@ -80,13 +80,29 @@ pub(crate) fn routing_input(engine: &Engine, messages: &[Value], model: &str) ->
     input
 }
 
+#[cfg(feature = "server")]
 pub async fn complete(
+    engine: &mut Engine,
+    messages: Vec<Value>,
+    model: &str,
+    session: Option<&mut Session>,
+    params: Value,
+    deltas: Option<UnboundedSender<Value>>,
+) -> Result<(RouteDecision, Value)> {
+    complete_control(engine, messages, model, session, params, deltas, None).await
+}
+
+pub async fn complete_control(
     engine: &mut Engine,
     mut messages: Vec<Value>,
     model: &str,
     session: Option<&mut Session>,
     params: Value,
     deltas: Option<UnboundedSender<Value>>,
+    agent_control: Option<(
+        std::sync::Arc<lh_core::agent::Control>,
+        UnboundedSender<Value>,
+    )>,
 ) -> Result<(RouteDecision, Value)> {
     if messages.is_empty() {
         return Err("messages must not be empty".into());
@@ -159,6 +175,16 @@ pub async fn complete(
                 );
             }
         }
+    }
+    if (specialist.agent || !specialist.tools.is_empty())
+        && let Some((control, events)) = agent_control
+    {
+        if execution.specialist != decision.specialist {
+            engine.load_specialist(&mut execution).await?;
+        }
+        let response =
+            lh_core::agent::run(engine, &execution, adapted, params, events, control).await?;
+        return Ok((decision, response));
     }
     let mut sampling = specialist.params.as_object().cloned().unwrap_or_default();
     let mut tools = None;

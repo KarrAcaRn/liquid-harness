@@ -27,6 +27,8 @@ pub struct Engine {
     hosts: BTreeMap<String, Host>,
     cache: RouteCache,
     model_calls: u64,
+    stages: BTreeMap<String, u64>,
+    recent: std::collections::VecDeque<RouteDecision>,
 }
 impl Engine {
     /// Load without routing an artificial request (for example, models pull).
@@ -88,11 +90,50 @@ impl Engine {
             hosts: BTreeMap::new(),
             cache: RouteCache::default(),
             model_calls: 0,
+            stages: BTreeMap::new(),
+            recent: std::collections::VecDeque::new(),
         }
     }
     /// Number of backend/decide attempts, including failed requests.
     pub fn model_calls(&self) -> u64 {
         self.model_calls
+    }
+    pub fn routing_stats(&self) -> json::Value {
+        json!({"model_calls":self.model_calls,"stage_counts":self.stages,"recent_routes":self.recent})
+    }
+    pub async fn process_status(&self) -> json::Value {
+        let mut states = BTreeMap::new();
+        for id in self.registry.plugins.keys() {
+            let status = match self.hosts.get(id) {
+                Some(host) => host.status().await.unwrap_or(json!({"state":"closed"})),
+                None => json!({"state":"not_started","pid":null,"restarts":0}),
+            };
+            states.insert(id, status);
+        }
+        json!(states)
+    }
+    pub async fn resident_models(&self) -> json::Value {
+        let mut models = Vec::new();
+        for (id, host) in &self.hosts {
+            if self.registry.plugins[id]
+                .manifest
+                .plugin
+                .provides
+                .iter()
+                .any(|p| p == "backend")
+                && host
+                    .status()
+                    .await
+                    .ok()
+                    .is_some_and(|s| s["state"] == "running")
+            {
+                match host.call("backend/status", json!({})).await {
+                    Ok(status) => models.push(json!({"backend":id,"loaded":status["loaded"]})),
+                    Err(error) => models.push(json!({"backend":id,"error":error.to_string()})),
+                }
+            }
+        }
+        json!(models)
     }
     pub fn host(&mut self, id: &str) -> Result<Host> {
         if !self.enabled(id) {
@@ -101,13 +142,26 @@ impl Engine {
         if let Some(host) = self.hosts.get(id) {
             return Ok(host.clone());
         }
-        let entry = self.registry.backend(id)?.clone();
-        let config = self
+        let entry = self
+            .registry
+            .plugins
+            .get(id)
+            .filter(|entry| entry.manifest.run.is_some())
+            .ok_or_else(|| Error::new(-32602, format!("unknown executable plugin '{id}'")))?
+            .clone();
+        let mut config = self
             .config
             .plugins
             .get(id)
             .map(|c| c.config.clone())
             .unwrap_or_default();
+        if entry.manifest.plugin.provides.iter().any(|p| p == "tool")
+            && !entry.manifest.config.contains_key("host_timeout_secs")
+        {
+            config
+                .entry("host_timeout_secs".into())
+                .or_insert(json!(self.config.agent.tool_timeout_secs.saturating_add(5)));
+        }
         let host = Host::new(entry, config);
         self.hosts.insert(id.into(), host.clone());
         Ok(host)
@@ -217,6 +271,11 @@ impl Engine {
         let start = Instant::now();
         let mut result = self.route_inner(input, router_override, session).await?;
         result.router_ms = start.elapsed().as_millis() as u64;
+        *self.stages.entry(result.reason.clone()).or_default() += 1;
+        if self.recent.len() == 32 {
+            self.recent.pop_front();
+        }
+        self.recent.push_back(result.clone());
         session.remember(input, &result);
         Ok(result)
     }

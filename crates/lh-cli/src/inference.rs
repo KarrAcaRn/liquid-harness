@@ -286,6 +286,14 @@ pub async fn run(
         }
         json!(parts)
     };
+    if specialist.agent || !specialist.tools.is_empty() {
+        return crate::agent_ui::run(
+            engine,
+            &decision,
+            vec![json!({"role":"user","content":content})],
+        )
+        .await;
+    }
     // This one-shot CLI has exactly one active call on this host. Subscribe after
     // loading so only this chat's stream notifications are consumed.
     let mut notifications = host.subscribe();

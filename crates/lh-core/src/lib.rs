@@ -1,4 +1,5 @@
 //! Lightweight plugin hosting and routing; no inference or HTTP dependencies.
+pub mod agent;
 pub mod cascade;
 pub use cascade::Session;
 pub use config::CascadeConfig;
@@ -6,6 +7,8 @@ pub mod config;
 pub mod host;
 pub mod registry;
 pub mod router;
+pub mod skills;
+pub mod tools;
 
 pub use config::Config;
 pub use host::Host;

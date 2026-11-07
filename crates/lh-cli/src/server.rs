@@ -1,6 +1,7 @@
 //! Small HTTP/1 adapter. The engine lock spans each complete inference, keeping
 //! backend broadcast notifications isolated between concurrent HTTP clients.
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+mod agent_api;
 use bytes::Bytes;
 use futures_util::stream;
 use http_body_util::{BodyExt, Full, Limited, StreamBody, combinators::UnsyncBoxBody};
@@ -32,6 +33,7 @@ type ApiResult<T> = Result<T, (StatusCode, String)>;
 const MAX_BODY: usize = 6 * 1024 * 1024;
 #[derive(Clone)]
 struct State {
+    runs: agent_api::Runs,
     engine: Arc<Mutex<Engine>>,
     token: Option<String>,
     streams: Arc<std::sync::Mutex<Vec<tokio::task::AbortHandle>>>,
@@ -335,6 +337,9 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
         }
     }
     let path = request.uri().path().to_owned();
+    if request.method() == hyper::Method::GET && path.starts_with("/lh/v1/") {
+        return agent_api::management(&state, &path).await;
+    }
     if request.method() == hyper::Method::GET && path == "/v1/models" {
         let engine = state.engine.lock().await;
         let mut data =
@@ -355,7 +360,9 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
             | "/v1/decide"
             | "/route"
             | "/decide"
-    ) {
+    ) && path != "/lh/v1/agent/runs"
+        && !path.starts_with("/lh/v1/agent/runs/")
+    {
         return Err((StatusCode::NOT_FOUND, "unknown endpoint".into()));
     }
     if request.method() != hyper::Method::POST {
@@ -396,6 +403,12 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
     }
     if path == "/v1/chat/completions" {
         return chat(state, value).await;
+    }
+    if path == "/lh/v1/agent/runs" {
+        return agent_api::start(state, value).await;
+    }
+    if path.starts_with("/lh/v1/agent/runs/") {
+        return agent_api::control(&state, &path, value).await;
     }
     let mut engine = state.engine.lock().await;
     match path.as_str() {
@@ -530,6 +543,7 @@ pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error:
     let listener = TcpListener::bind(bind).await?;
     eprintln!("lh server listening on {}", listener.local_addr()?);
     let state = State {
+        runs: Arc::new(Mutex::new(Default::default())),
         engine: Arc::new(Mutex::new(engine)),
         token,
         streams: Arc::new(std::sync::Mutex::new(Vec::new())),
