@@ -560,6 +560,11 @@ User `[plugins.<id>.config]` settings shallowly override manifest `[config]` key
   deadline; startup delay (>1 s), failed-load registration and process-group cleanup
   remain covered. Production timeouts are unchanged. See
   [fixture hardening evidence](FREETOKEN-FIXTURE-HARDENING.md).
+- CLI HTTP fixtures let the child bind port zero and use its private stderr
+  bound-address announcement for readiness, rather than release/rebind plus a
+  connect-only probe. Occupied-listener and sibling-teardown regressions cover
+  ownership; historical resets are not conclusively attributed. See the
+  [controlled reset investigation](CLI-RESET-INVESTIGATION.md).
 - `scripts/smoke.sh`: real end-to-end run on CPU with d1-2B + LFM3-1.7B (Q4), a few minutes max.
   Skips cleanly with a message if `llama-server` or the models are missing.
   Python 3 prepares isolated file-source manifests and a deterministic red-square PNG.

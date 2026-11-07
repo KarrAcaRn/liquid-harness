@@ -16,6 +16,9 @@ struct Server {
 }
 impl Server {
     fn start(auth: bool) -> Self {
+        Self::start_on(auth, "127.0.0.1:0")
+    }
+    fn start_on(auth: bool, bind: &str) -> Self {
         let directory = std::env::temp_dir().join(format!(
             "lh-server-{}-{}",
             std::process::id(),
@@ -38,9 +41,9 @@ impl Server {
         let extra = directory.join("decide");
         std::fs::create_dir_all(&extra).unwrap();
         std::fs::write(extra.join("plugin.toml"), "[plugin]\nid='decide-pack'\nversion='0.1.0'\nprovides=['specialist']\n[[specialist]]\nid='mock-decide'\nroute='Decide'\ntask='decide'\ninputs=['text']\noutputs=['text']\nbackend='mock'\nmodel={source='file:mock'}\n").unwrap();
-        let socket = TcpListener::bind("127.0.0.1:0").unwrap();
-        let address = socket.local_addr().unwrap().to_string();
-        drop(socket);
+        // The child owns port allocation; never release/rebind a discovered port.
+        // A file also avoids filling an undrained stderr pipe during a test.
+        let stderr = std::fs::File::create(directory.join("server.stderr")).unwrap();
         let child = Command::new(env!("CARGO_BIN_EXE_lh"))
             .current_dir(&directory)
             .env_remove("LH_CONFIG")
@@ -67,39 +70,45 @@ impl Server {
                 ),
             )
             .env("LH_TEST_SERVER_TOKEN", "test-secret")
-            .args(["serve", "--bind", &address])
+            .args(["serve", "--bind", bind])
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
+            .stderr(stderr)
             .spawn()
             .unwrap();
         let mut server = Self {
             child,
             directory,
-            address,
+            address: String::new(),
         };
         let start = Instant::now();
         loop {
-            if TcpStream::connect(&server.address).is_ok() {
-                break;
-            }
+            let error = server.stderr();
             if let Some(status) = server.child.try_wait().unwrap() {
-                let mut error = String::new();
-                server
-                    .child
-                    .stderr
-                    .take()
-                    .unwrap()
-                    .read_to_string(&mut error)
-                    .unwrap();
+                let error = server.stderr();
                 panic!("server exited {status}: {error}");
+            }
+            // Only a complete line from this child's private stderr proves bind.
+            if let Some(address) = error.split_inclusive('\n').find_map(|line| {
+                line.strip_suffix('\n')?
+                    .strip_prefix("lh server listening on ")?
+                    .parse::<std::net::SocketAddr>()
+                    .ok()
+            }) {
+                assert!(address.ip().is_loopback());
+                assert_ne!(address.port(), 0);
+                server.address = address.to_string();
+                break;
             }
             assert!(
                 start.elapsed() < Duration::from_secs(10),
-                "server startup timed out"
+                "server startup timed out: {error}"
             );
             std::thread::sleep(Duration::from_millis(20));
         }
         server
+    }
+    fn stderr(&self) -> String {
+        std::fs::read_to_string(self.directory.join("server.stderr")).unwrap()
     }
     fn request(
         &self,
@@ -119,7 +128,15 @@ impl Server {
         write!(socket, "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: {mime}\r\nContent-Length: {}\r\n{authorization}\r\n", body.len()).unwrap();
         socket.write_all(body).unwrap();
         let mut response = Vec::new();
-        socket.read_to_end(&mut response).unwrap();
+        socket.read_to_end(&mut response).unwrap_or_else(|error| {
+            panic!(
+                "{method} {path}: {error}; child={} address={} received={} bytes; stderr={}",
+                self.child.id(),
+                self.address,
+                response.len(),
+                self.stderr()
+            )
+        });
         let split = response.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
         let headers = String::from_utf8(response[..split].to_vec()).unwrap();
         let status = headers.split_whitespace().nth(1).unwrap().parse().unwrap();
@@ -169,6 +186,68 @@ impl Drop for Server {
         let _ = std::fs::remove_dir_all(&self.directory);
     }
 }
+#[test]
+fn occupied_listener_cannot_satisfy_child_readiness() {
+    let decoy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = decoy.local_addr().unwrap().to_string();
+    let failure = std::panic::catch_unwind(|| Server::start_on(false, &address))
+        .err()
+        .expect("an unrelated listener must not make startup succeed");
+    let message = failure.downcast_ref::<String>().unwrap();
+    assert!(message.contains("server exited"), "{message}");
+    assert!(message.contains("Address already in use"), "{message}");
+    decoy.set_nonblocking(true).unwrap();
+    assert_eq!(
+        decoy.accept().unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}
+
+#[test]
+fn child_owned_listeners_survive_sibling_teardown_and_split_get() {
+    let server = Server::start(false);
+    let sibling = Server::start(true);
+    assert_ne!(server.address, sibling.address);
+    drop(sibling);
+    // An empty readiness-style connection cannot affect the next connection.
+    drop(TcpStream::connect(&server.address).unwrap());
+    let mut socket = TcpStream::connect(&server.address).unwrap();
+    socket
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .unwrap();
+    socket.set_nodelay(true).unwrap();
+    for part in [
+        &b"GET /v1/models HTTP/1.1\r\n"[..],
+        &b"Host: localhost\r\nConnection: close\r\n"[..],
+        &b"Content-Length: 0\r\n"[..],
+        &b"\r\n"[..],
+    ] {
+        socket.write_all(part).unwrap();
+    }
+    let mut response = Vec::new();
+    socket.read_to_end(&mut response).unwrap();
+    let split = response.windows(4).position(|w| w == b"\r\n\r\n").unwrap();
+    let headers = std::str::from_utf8(&response[..split])
+        .unwrap()
+        .to_lowercase();
+    assert!(headers.starts_with("http/1.1 200 "));
+    let length: usize = headers
+        .lines()
+        .find_map(|line| line.strip_prefix("content-length: "))
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert_eq!(response[split + 4..].len(), length);
+    let models: Value = json::from_slice(&response[split + 4..]).unwrap();
+    assert!(
+        models["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|model| model["id"] == "auto")
+    );
+}
+
 #[test]
 fn endpoints_stream_multipart_and_media_validation() {
     let server = Server::start(false);
