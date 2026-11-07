@@ -11,7 +11,7 @@ Everything is a plugin: inference backends, specialist models, routers and tools
 Plugins are separate processes speaking JSON-RPC over stdio, so they can be written in any
 language and a crashing plugin never takes the harness down.
 
-Status: M4b implemented: llama.cpp backend, streamed text/image answers, ASR/TTS,
+Status: M4c implemented: embedded browser UI, llama.cpp backend, streamed text/image answers, ASR/TTS,
 model pull, routing cascade/evaluation, conversation REPL, MCP tools, bounded agent
 runs with approvals/skills, and HTTP serving/management –
 see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -104,6 +104,43 @@ noninteractive approvals. The HTTP host-execution endpoint is
 `POST /lh/v1/agent/runs`; OpenAI chat retains client-owned tool execution.
 See [tools/API contracts](docs/tools.md), [skills](docs/skills.md), and
 [measured agent results and limitations](docs/M4B-RESULTS.md).
+
+### Browser UI
+
+With the backend/plugins configured as above, start `lh serve` and open
+http://127.0.0.1:8484/ in your browser. Chat, Plugins (including specialists and
+router configuration), Tools, Skills and Status are served on the same port.
+No Node build, CDN, internet connection or frontend package installation is needed.
+
+Chat stores conversations and attachments in this browser's localStorage. New,
+Rename, Delete and Export manage that local history; it is not server-side storage
+or encrypted storage. Select Auto route or a specialist. Agent mode explicitly
+enables tool execution with Allow/Deny/Always approvals and cancellation. Always
+means identical tool/arguments in this run only. Ordinary chat does not execute
+local tools. Expand route and agent details to inspect decisions and tool results.
+
+Attach images/audio or record a short clip (localhost/HTTPS and microphone
+permission required). Non-WAV recordings need backend ffmpeg support. Speak replies
+requests WAV from the configured speech specialist; if autoplay is blocked, press
+Play. Attachments are capped at 4 MiB per turn and requests at 6 MiB including
+history. Export and start a new conversation when storage or context limits arise.
+
+When `server_token_env` is configured, expand Connection & authentication and
+enter the bearer token. It stays in sessionStorage for this tab, not chat history.
+The immutable UI shell is public so token entry can work; all API data/control
+endpoints remain authenticated. Keep the default localhost binding: this server
+has no TLS or multi-user isolation. UI responses carry a restrictive same-origin
+CSP, and Markdown HTML is escaped. No wildcard CORS is enabled.
+
+The default `web` Cargo feature includes `server`. API-only build:
+`cargo build -p lh-cli --no-default-features --features server`; no HTTP/UI:
+`cargo build -p lh-cli --no-default-features`.
+
+Offline browser fixture after `cargo build --workspace`:
+`python3 scripts/web-smoke-server.py` (http://127.0.0.1:8485/; Ctrl-C to stop).
+Use `web-agent` with Agent mode for a scripted approval. JS checks run from Rust
+tests if Node is installed, or directly with `node scripts/test-web.mjs`.
+See [M4c verification and limits](docs/M4C-RESULTS.md).
 
 ### Audio
 

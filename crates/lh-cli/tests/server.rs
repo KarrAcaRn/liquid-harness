@@ -187,6 +187,68 @@ impl Drop for Server {
     }
 }
 #[test]
+#[cfg(feature = "web")]
+fn embedded_ui_is_public_but_api_remains_authenticated() {
+    let server = Server::start(true);
+    for (path, mime, needle) in [
+        ("/", "text/html", "id=\"composer\""),
+        ("/index.html", "text/html", "id=\"composer\""),
+        ("/app.mjs", "text/javascript", "readSSE"),
+        ("/markdown.mjs", "text/javascript", "escapeHTML"),
+        ("/style.css", "text/css", "prefers-color-scheme"),
+    ] {
+        let (status, headers, body) = server.request("GET", path, b"", "", None);
+        assert_eq!(status, 200);
+        assert!(headers.contains(&format!("content-type: {mime}")));
+        assert!(headers.contains("content-security-policy: default-src 'self'"));
+        assert!(headers.contains("frame-ancestors 'none'"));
+        assert!(headers.contains("x-content-type-options: nosniff"));
+        assert!(!headers.contains("access-control-allow-origin"));
+        assert!(String::from_utf8(body).unwrap().contains(needle));
+        let (status, _, body) = server.request("HEAD", path, b"", "", None);
+        assert_eq!(status, 200);
+        assert!(body.is_empty());
+        assert_eq!(server.request("POST", path, b"", "", None).0, 405);
+    }
+    for path in [
+        "/v1/models",
+        "/lh/v1/plugins",
+        "/lh/v1/status",
+        "/lh/v1/skills/coding",
+    ] {
+        assert_eq!(server.request("GET", path, b"", "", None).0, 401);
+        assert_eq!(server.request("GET", path, b"", "", Some("wrong")).0, 401);
+    }
+    assert_eq!(
+        server
+            .request("GET", "/../Cargo.toml", b"", "", Some("test-secret"))
+            .0,
+        404
+    );
+}
+
+#[test]
+#[cfg(feature = "web")]
+fn javascript_checks_when_node_is_installed() {
+    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/test-web.mjs");
+    match Command::new("node").arg(script).status() {
+        Ok(status) => assert!(status.success()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("Skipping web JS checks: node not on PATH")
+        }
+        Err(error) => panic!("node failed: {error}"),
+    }
+}
+
+#[test]
+#[cfg(not(feature = "web"))]
+fn api_only_build_has_no_ui() {
+    let server = Server::start(false);
+    assert_eq!(server.request("GET", "/", b"", "", None).0, 404);
+    assert_eq!(server.request("GET", "/app.mjs", b"", "", None).0, 404);
+}
+
+#[test]
 fn occupied_listener_cannot_satisfy_child_readiness() {
     let decoy = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = decoy.local_addr().unwrap().to_string();
@@ -267,6 +329,7 @@ fn endpoints_stream_multipart_and_media_validation() {
     assert!(headers.contains("x-lh-route: mock-text;p="));
     assert!(headers.contains(";stage="));
     let response: Value = json::from_slice(&body).unwrap();
+    assert_eq!(response["lh"]["specialist"], "mock-text");
     assert_eq!(response["choices"][0]["message"]["content"], "hello stream");
     let mut streaming = chat;
     streaming["stream"] = json!(true);

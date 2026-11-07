@@ -1,9 +1,9 @@
 # liquid-harness – Architecture
 
-Status: M2 through M4b implemented (llama.cpp and opt-in FreeToken backends,
+Status: M2 through M4c implemented (llama.cpp and opt-in FreeToken backends,
 capability-aware fallback, routing cascade, sessions, evaluation, audio ASR/TTS,
 conversation REPL, OpenAI-compatible HTTP subset, bounded agent runs, MCP host,
-approvals, skills and management APIs).
+approvals, skills, management APIs and embedded browser UI).
 Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
@@ -514,7 +514,7 @@ OpenAI-compatible subset so Hermes, Open WebUI, etc. can use the harness as a pr
 - `POST /v1/audio/speech`: `input`, `model`, optional `voice`/`language`,
   `response_format: wav`; binary WAV response.
 - Bind to localhost by default; `server_token_env` names the bearer-token environment
-  variable. Missing/empty configured tokens fail startup; auth covers every endpoint.
+  variable. Missing/empty configured tokens fail startup; auth covers every API endpoint.
 
 M3b uses Hyper HTTP/1 directly, with Multer for multipart and CLI-only optional
 HTTP dependencies. Core remains HTTP-free. The same-handler Axum adapter probe
@@ -522,7 +522,7 @@ was larger; binary measurements and scope are in [M3b results](M3B-RESULTS.md).
 HTTP bodies are capped at 6 MiB with a 30-second body timeout. Only base64 data
 URLs are accepted for HTTP images; input audio is base64 plus a validated format.
 Local paths, remote URLs and decide file attachments are forbidden. Plugin RPC
-frames remain bounded at 8 MiB. There is no TLS, CORS UI, rate limiting or HTTP/2.
+frames remain bounded at 8 MiB. There is no TLS, cross-origin API access, rate limiting or HTTP/2.
 
 HTTP conversations are stateless: clients supply history. One engine/cache is
 shared, and a mutex serializes complete inference calls so backend broadcast
@@ -551,6 +551,39 @@ request, never new unsupported media. Text/system/tool messages are preserved;
 all-text part arrays collapse to strings for text models. ASR replaces audio parts
 with transcript text in the REPL history. HTTP clients resending audio incur
 transcription again. No automatic context truncation/summarization is performed.
+
+### Embedded browser UI (M4c)
+
+The default-on `web` feature implies `server`; `--no-default-features --features
+server` keeps the API without the UI. `GET`/`HEAD` on `/`, `/index.html`,
+`/app.mjs`, `/markdown.mjs`, `/style.css` serves compile-time embedded assets,
+not arbitrary filesystem paths. These immutable assets are public to bootstrap
+token entry; every API data/control request still requires the configured token.
+The UI sends it as a bearer header and stores it only in sessionStorage.
+Assets have explicit UTF-8 MIME types, no-cache, nosniff, no-referrer and CSP:
+self-only scripts/styles/connect, self/data/blob images and media, no objects,
+base URLs or framing. No inline scripts/styles, eval, CDN or runtime framework.
+
+Hash navigation selects Chat/Plugins/Tools/Skills/Status. Read-only management
+uses existing M4b endpoints sequentially (parallel reads would contend for the
+nonblocking engine lock); busy errors are visible with an explicit Refresh.
+Router stage switches are displayed, not editable. Chat completion JSON and SSE
+chunks add `lh: RouteDecision`; the final successful SSE chunk includes the
+executed backend while retaining the original routing reason. Audio chat's route
+still describes its input specialist, not a new routing call. Agent SSE already
+carries the full route and retained tool history.
+
+Conversations/attachments are browser-local, unencrypted localStorage, with
+explicit storage-failure warnings and export. Streaming is parsed incrementally
+across UTF-8/chunk boundaries; incomplete answers are excluded from follow-up
+context. HTML is escaped before the deliberately small Markdown renderer emits
+markup; only HTTP(S) links without credentials are clickable, and remote Markdown
+images are never fetched. Agent mode is explicit, with approval controls and
+cancel; the existing server cancellation and approval boundaries are unchanged.
+File/MediaRecorder inputs are bounded at 4 MiB per turn, complete JSON at 6 MiB.
+WebM/Ogg/MP4 conversion remains the backend's ffmpeg responsibility. Speech uses
+the binary WAV API and an audio player. Real hardware permissions, browser quota
+and model context windows remain external limits. Verification: [M4c](M4C-RESULTS.md).
 
 ## 9. Configuration
 ### Agent execution and management (M4b)

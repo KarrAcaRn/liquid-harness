@@ -2,6 +2,8 @@
 //! backend broadcast notifications isolated between concurrent HTTP clients.
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 mod agent_api;
+#[cfg(feature = "web")]
+mod web;
 use bytes::Bytes;
 use futures_util::stream;
 use http_body_util::{BodyExt, Full, Limited, StreamBody, combinators::UnsyncBoxBody};
@@ -188,7 +190,7 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
                 .map_err(backend)?;
         return Ok(routed(
             json_response(
-                json!({"id":id,"object":"chat.completion","created":created(),"model":route.specialist,"choices":[{"index":0,"message":response["message"],"finish_reason":response["finish_reason"]}],"usage":response["usage"]}),
+                json!({"id":id,"object":"chat.completion","created":created(),"model":route.specialist,"choices":[{"index":0,"message":response["message"],"finish_reason":response["finish_reason"]}],"usage":response["usage"],"lh":route}),
             ),
             &route,
         ));
@@ -198,8 +200,14 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
     let input = crate::conversation::routing_input(&engine, &messages, &model);
     let route = engine.route(&input, None).await.map_err(bad)?;
     let selected = route.specialist.clone();
+    let stream_route = route.clone();
     let (out, incoming) = mpsc::channel::<Bytes>(16);
     let worker = tokio::spawn(async move {
+        let route_chunk = |delta, finish| {
+            let mut value = chunk(&id, &selected, delta, finish);
+            value["lh"] = json!(stream_route);
+            value
+        };
         let (deltas, mut rx) = mpsc::unbounded_channel();
         let inference = crate::conversation::complete(
             &mut engine,
@@ -214,7 +222,7 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
             tokio::select! {
                 biased;
                 delta = rx.recv(), if !rx.is_closed() || !rx.is_empty() => if let Some(delta) = delta {
-                    let frame = format!("data: {}\n\n", chunk(&id, &selected, delta, Value::Null));
+                    let frame = format!("data: {}\n\n", route_chunk(delta, Value::Null));
                     // A disconnected client must not release the engine while
                     // its backend is still emitting broadcast notifications.
                     let _ = out.send(Bytes::from(frame)).await;
@@ -223,12 +231,15 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
             }
         };
         while let Ok(delta) = rx.try_recv() {
-            let frame = format!("data: {}\n\n", chunk(&id, &selected, delta, Value::Null));
+            let frame = format!("data: {}\n\n", route_chunk(delta, Value::Null));
             let _ = out.send(Bytes::from(frame)).await;
         }
         let final_event = match result {
-            Ok((_, response)) => {
-                chunk(&id, &selected, json!({}), response["finish_reason"].clone())
+            Ok((loaded_route, response)) => {
+                let mut value = route_chunk(json!({}), response["finish_reason"].clone());
+                // Keep the input routing explanation, add the executed backend.
+                value["lh"]["backend"] = json!(loaded_route.backend);
+                value
             }
             Err(error) => json!({"error":{"message":error.to_string(),"type":"server_error"}}),
         };
@@ -325,6 +336,12 @@ async fn multipart(content_type: &str, bytes: Bytes) -> ApiResult<Value> {
     Ok(value)
 }
 async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
+    // The immutable shell is public so browsers can enter a token. All data
+    // and control endpoints below still require the configured bearer token.
+    #[cfg(feature = "web")]
+    if let Some(reply) = web::asset(request.method(), request.uri().path()) {
+        return Ok(reply);
+    }
     if let Some(token) = &state.token {
         let expected = format!("Bearer {token}");
         if request
