@@ -555,6 +555,11 @@ User `[plugins.<id>.config]` settings shallowly override manifest `[config]` key
 
 - Unit tests per crate; integration tests spawn the real `mock-backend` binary through the
   plugin host (no models needed). `cargo test --workspace` must pass offline.
+- FreeToken spawn unit fixtures allow five seconds for interpreter/server startup.
+  A separate already-listening, confirmed-loading fixture tests a 500 ms readiness
+  deadline; startup delay (>1 s), failed-load registration and process-group cleanup
+  remain covered. Production timeouts are unchanged. See
+  [fixture hardening evidence](FREETOKEN-FIXTURE-HARDENING.md).
 - `scripts/smoke.sh`: real end-to-end run on CPU with d1-2B + LFM3-1.7B (Q4), a few minutes max.
   Skips cleanly with a message if `llama-server` or the models are missing.
   Python 3 prepares isolated file-source manifests and a deterministic red-square PNG.

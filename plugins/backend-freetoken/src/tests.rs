@@ -367,6 +367,11 @@ fn idle_worker_reaps_only_unpinned() {
     }
 }
 
+// Interpreter imports and scheduling are setup, not the readiness behavior under test.
+const FIXTURE_STARTUP_SECS: u64 = 5;
+const READINESS_TIMEOUT: Duration = Duration::from_millis(500);
+const TIMEOUT_MESSAGE: &str = "FreeToken readiness timeout (cache state is not serving)";
+
 struct Fixture {
     dir: std::path::PathBuf,
 }
@@ -387,10 +392,17 @@ impl Fixture {
         Self { dir }
     }
     fn config(&self, state: &str) -> Value {
-        json!({"load_timeout_secs":1,"models":{"test":{"spawn":{"venv":self.dir,"model_path":"org/model","args":["--test-extra","value"],"env":{"FT_TEST_REPORT":self.dir.join("report.json"),"FT_TEST_STATE":state,"FT_TEST_VALUE":"configured"}}}}})
+        json!({"load_timeout_secs":FIXTURE_STARTUP_SECS,"models":{"test":{"spawn":{"venv":self.dir,"model_path":"org/model","args":["--test-extra","value"],"env":{"FT_TEST_REPORT":self.dir.join("report.json"),"FT_TEST_STATE":state,"FT_TEST_VALUE":"configured"}}}}})
     }
     fn report(&self) -> Value {
         json::from_slice(&std::fs::read(self.dir.join("report.json")).unwrap()).unwrap()
+    }
+    fn loading_responses(&self) -> usize {
+        std::fs::read_to_string(self.dir.join("report.json.responses"))
+            .unwrap()
+            .lines()
+            .filter(|line| *line == "loading")
+            .count()
     }
 }
 impl Drop for Fixture {
@@ -460,16 +472,69 @@ fn fake_ft_unload_and_failed_load_cleanup() {
             fixture.config(state),
             vec![
                 load("k", false),
+                rpc("backend/status", json!({})),
                 rpc("backend/unload", json!({"key":"k"})),
                 rpc("backend/status", json!({})),
             ],
         );
         if state == "loading" {
             assert_eq!(response(&frames, 2)["error"]["code"], -32001);
+            assert_eq!(response(&frames, 2)["error"]["message"], TIMEOUT_MESSAGE);
+            assert!(fixture.loading_responses() > 0);
+            // Check before unload: failed load itself must leave no registration.
+            assert_eq!(response(&frames, 3)["result"]["loaded"], json!([]));
         } else {
-            assert_eq!(response(&frames, 2)["result"]["ready"], true);
+            assert_eq!(response(&frames, 2)["result"]["ready"], true, "{frames:?}");
         }
-        assert_eq!(response(&frames, 4)["result"]["loaded"], json!([]));
+        assert_eq!(response(&frames, 5)["result"]["loaded"], json!([]));
         assert_reaped(&fixture.report());
     }
+}
+
+#[test]
+fn fake_ft_slow_start_exceeds_old_budget_and_still_cleans_up() {
+    let fixture = Fixture::new();
+    let mut config = fixture.config("serving");
+    config["models"]["test"]["spawn"]["env"]["FT_TEST_STARTUP_DELAY"] = json!("1.2");
+    let start = Instant::now();
+    let frames = run(config, vec![load("k", false)]);
+    assert_eq!(response(&frames, 2)["result"]["ready"], true, "{frames:?}");
+    assert!(start.elapsed() >= Duration::from_millis(1200));
+    assert_reaped(&fixture.report());
+}
+
+#[test]
+fn fake_ft_already_listening_loading_times_out_on_short_deadline() {
+    let fixture = Fixture::new();
+    let config: Config = json::from_value(fixture.config("loading")).unwrap();
+    // Port zero lets this fixture retain its own ephemeral listening socket.
+    let process = spawn(config.models["test"].spawn.as_ref().unwrap(), 0).unwrap();
+    let mut r = resident(String::new());
+    r.process = Some(process); // RAII cleanup also covers assertion failures.
+    let setup = Instant::now();
+    while !fixture.dir.join("report.json").exists() {
+        assert!(setup.elapsed() < Duration::from_secs(FIXTURE_STARTUP_SECS));
+        thread::sleep(Duration::from_millis(10));
+    }
+    let report = fixture.report();
+    r.base = format!("http://127.0.0.1:{}", report["port"]);
+    // Confirm a real loading response before starting the short deadline.
+    let value: Value = agent(2)
+        .get(&format!("{}/v1/cache/status", r.base))
+        .call()
+        .unwrap()
+        .into_json()
+        .unwrap();
+    assert_eq!(value["state"], "loading");
+    let start = Instant::now();
+    let error = ready(&mut r, READINESS_TIMEOUT, || Ok(())).unwrap_err();
+    let elapsed = start.elapsed();
+    assert_eq!(error.code, -32001);
+    assert_eq!(error.message, TIMEOUT_MESSAGE);
+    assert!(elapsed >= READINESS_TIMEOUT);
+    assert!(elapsed < Duration::from_secs(2), "elapsed: {elapsed:?}");
+    // One setup probe plus at least one request from ready, all still loading.
+    assert!(fixture.loading_responses() >= 2);
+    drop(r);
+    assert_reaped(&report);
 }

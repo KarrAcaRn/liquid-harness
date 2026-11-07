@@ -14,10 +14,7 @@ if child == 0:
     while True:
         time.sleep(60)
 
-with open(os.environ["FT_TEST_REPORT"], "w", encoding="utf-8") as report:
-    json.dump({"pid": os.getpid(), "child": child, "args": sys.argv[1:],
-               "value": os.environ["FT_TEST_VALUE"],
-               "venv": os.environ["VIRTUAL_ENV"]}, report)
+report_path = os.environ["FT_TEST_REPORT"]
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
@@ -46,9 +43,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+        self.wfile.flush()
+        with open(report_path + ".responses", "a", encoding="utf-8") as responses:
+            responses.write(os.environ["FT_TEST_STATE"] + "\n")
 
     def log_message(self, format, *args):
         pass
 
+time.sleep(float(os.environ.get("FT_TEST_STARTUP_DELAY", "0")))
 port = int(sys.argv[sys.argv.index("--port") + 1])
-http.server.HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+server = http.server.HTTPServer(("127.0.0.1", port), Handler)
+# Publish only a complete report, after the listening socket exists.
+with open(report_path + ".tmp", "w", encoding="utf-8") as report:
+    json.dump({"pid": os.getpid(), "child": child, "args": sys.argv[1:],
+               "value": os.environ["FT_TEST_VALUE"],
+               "venv": os.environ["VIRTUAL_ENV"],
+               "port": server.server_port}, report)
+os.replace(report_path + ".tmp", report_path)
+server.serve_forever()
