@@ -64,7 +64,7 @@ pub async fn pull(engine: &mut Engine, id: &str) -> Result<Value> {
     Ok(result)
 }
 
-fn audio_url(reference: &str) -> Result<String> {
+pub(crate) fn audio_url(reference: &str) -> Result<String> {
     const MAX_AUDIO: usize = 5 * 1024 * 1024;
     if reference.starts_with("data:audio/") {
         let (header, data) = reference.split_once(',').ok_or("invalid audio data URL")?;
@@ -104,7 +104,7 @@ fn audio_url(reference: &str) -> Result<String> {
     ))
 }
 
-fn save_audio(reference: &str, target: Option<&Path>) -> Result<std::path::PathBuf> {
+pub(crate) fn save_audio(reference: &str, target: Option<&Path>) -> Result<std::path::PathBuf> {
     let bytes = if let Some(data) = reference.strip_prefix("data:audio/wav;base64,") {
         STANDARD.decode(data)?
     } else if reference.starts_with("data:") {
@@ -145,7 +145,7 @@ pub struct AudioOptions {
     pub voice: Option<String>,
 }
 
-fn task_specialist(engine: &Engine, task: &str) -> Result<String> {
+pub(crate) fn task_specialist(engine: &Engine, task: &str) -> Result<String> {
     let candidates: Vec<_> = engine
         .registry
         .specialists

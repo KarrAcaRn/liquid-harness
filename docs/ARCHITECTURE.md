@@ -1,7 +1,8 @@
 # liquid-harness – Architecture
 
-Status: M2, M2b, M2c and M3a implemented (llama.cpp and opt-in FreeToken backends,
-capability-aware fallback, routing cascade, sessions, evaluation and audio ASR/TTS).
+Status: M2 through M3b implemented (llama.cpp and opt-in FreeToken backends,
+capability-aware fallback, routing cascade, sessions, evaluation, audio ASR/TTS,
+conversation REPL and OpenAI-compatible HTTP subset).
 Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
@@ -445,8 +446,8 @@ crates/lh-plugin-sdk  Write Rust plugins in ~30 lines: blocking stdio loop, meth
                       dispatch, stream/log helpers. std + lh-protocol only.
 crates/lh-core        Plugin discovery + host (tokio process/io), registry, router
                       engine, orchestrator, config. No HTTP.
-crates/lh-cli         Binary `lh`. M2 adds run, models pull and eval routing. HTTP server
-                      and its feature flags are deferred to M3.
+crates/lh-cli         Binary `lh`: run, models pull, eval routing, chat REPL and HTTP/1
+                      server (default-on `server` feature). Shared conversation adapter.
 plugins/backend-llamacpp  Binary `lh-backend-llamacpp`: spawns/stops llama-server per
                       model on a free localhost port, health-waits, LRU/TTL unload,
                       proxies chat (SSE → `$/stream`) and decide (`/v1/systemone`).
@@ -486,7 +487,48 @@ OpenAI-compatible subset so Hermes, Open WebUI, etc. can use the harness as a pr
   a specialist id forces it. Images via `image_url` data URLs, audio via `input_audio`.
 - `POST /v1/route` → RouteDecision (harness extension).
 - `POST /v1/decide` → passthrough to the router/decision model (harness extension).
-- Bind to localhost by default; optional bearer token from config.
+- `POST /v1/audio/transcriptions`: multipart `file`, `model` (auto by default),
+  optional `language`; JSON transcription result. Other response formats rejected.
+- `POST /v1/audio/speech`: `input`, `model`, optional `voice`/`language`,
+  `response_format: wav`; binary WAV response.
+- Bind to localhost by default; `server_token_env` names the bearer-token environment
+  variable. Missing/empty configured tokens fail startup; auth covers every endpoint.
+
+M3b uses Hyper HTTP/1 directly, with Multer for multipart and CLI-only optional
+HTTP dependencies. Core remains HTTP-free. The same-handler Axum adapter probe
+was larger; binary measurements and scope are in [M3b results](M3B-RESULTS.md).
+HTTP bodies are capped at 6 MiB with a 30-second body timeout. Only base64 data
+URLs are accepted for HTTP images; input audio is base64 plus a validated format.
+Local paths, remote URLs and decide file attachments are forbidden. Plugin RPC
+frames remain bounded at 8 MiB. There is no TLS, CORS UI, rate limiting or HTTP/2.
+
+HTTP conversations are stateless: clients supply history. One engine/cache is
+shared, and a mutex serializes complete inference calls so backend broadcast
+streams cannot contaminate other clients. SSE sends live delta frames followed
+by a finish chunk and `[DONE]`, including draining queued final deltas. Routing
+is resolved before streaming headers, then the selected specialist is pinned
+for execution (no second model decision). In-stream failures are error events.
+A disconnected client does not cancel the serial backend handler. Ctrl-C stops
+accepting, drains connections briefly, aborts pending HTTP work and shuts down
+the engine. No cancellation/replay promise is added to the SDK.
+
+`x-lh-route: ID;p=CONFIDENCE;stage=REASON` identifies the input specialist.
+Chat audio uses transcribe→chat (default text, or vision when images remain);
+the header identifies ASR, while usage reflects the final chat stage only.
+Directly routed speech returns a `message.audio` extension containing the backend
+WAV data URL/sample-rate/duration (also emitted as an SSE delta); portable clients
+should use the binary `/v1/audio/speech` endpoint instead.
+
+The plain line REPL owns one M2c Session and a full role-preserving conversation.
+`/image F` and `/audio F` attach to the next turn; `/speak` toggles speech of the
+answer, `/model ID|auto` changes routing, `/explain` shows the last complete route,
+`/reset` clears session/history/pending media, `/quit` exits. Images in history
+remain relevant to auto routing; single-candidate selection precedes sticky as
+in M2c. Explicit text switches filter old incompatible media from the model
+request, never new unsupported media. Text/system/tool messages are preserved;
+all-text part arrays collapse to strings for text models. ASR replaces audio parts
+with transcript text in the REPL history. HTTP clients resending audio incur
+transcription again. No automatic context truncation/summarization is performed.
 
 ## 9. Configuration
 

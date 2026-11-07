@@ -7,7 +7,18 @@ edition.workspace = true
 name = "lh"
 path = "src/main.rs"
 
+[features]
+default = ["server"]
+# HTTP/1 only: avoid axum/tower routing and HTTP/2 in this small binary.
+server = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:bytes", "dep:multer", "dep:futures-util", "tokio/net", "tokio/signal"]
+
 [dependencies]
+hyper = { version = "1", features = ["server", "http1"], optional = true }
+hyper-util = { version = "0.1", features = ["tokio"], optional = true }
+http-body-util = { version = "0.1", optional = true }
+bytes = { version = "1", optional = true }
+multer = { version = "3", optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"], optional = true }
 lh-core.workspace = true
 lh-protocol.workspace = true
 tokio.workspace = true

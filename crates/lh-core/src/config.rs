@@ -37,6 +37,7 @@ use std::{
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub server_token_env: Option<String>,
     pub cascade: CascadeConfig,
     pub default_specialist: String,
     pub router: String,
@@ -47,6 +48,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             cascade: CascadeConfig::default(),
+            server_token_env: None,
             default_specialist: "lfm3-text".into(),
             router: "rules".into(),
             plugin_path: vec![],

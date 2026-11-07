@@ -77,6 +77,81 @@ fn default_repo_discovery_has_only_real_specialists() {
 }
 
 #[test]
+fn repl_streams_switches_preserves_images_resets_and_rejects_commands() {
+    use std::io::Write;
+    use std::process::Stdio;
+    let f = Fixture::new();
+    std::fs::write(f.0.join("picture.png"), [0, 1, 2]).unwrap();
+    let mut child = f
+        .command()
+        .arg("chat")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"hello\nfollowup\n/image picture.png\ndescribe\nmore details\n/model mock-text\ntext again\n/reset\n/model auto\nfresh\n/bogus\n/explain\n/quit\n").unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    assert_eq!(
+        String::from_utf8(out.stdout).unwrap(),
+        "hello\nfollowup\ndescribe\nmore details\ntext again\nfresh\n"
+    );
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    let routes: Vec<Value> = stderr
+        .lines()
+        .filter_map(|s| s.strip_prefix("[route] ").filter(|s| s.starts_with('{')))
+        .map(|s| json::from_str(s).unwrap())
+        .collect();
+    assert_eq!(routes.len(), 6, "{stderr}");
+    assert_eq!(routes[1]["reason"], "sticky");
+    assert_eq!(routes[2]["specialist"], "mock-vision");
+    assert_eq!(routes[3]["specialist"], "mock-vision");
+    assert_eq!(routes[4]["specialist"], "mock-text");
+    assert_eq!(routes[5]["specialist"], "mock-text");
+    assert!(stderr.contains("unknown command"));
+    assert!(stderr.contains("stages"));
+}
+
+#[test]
+fn repl_transcribes_audio_and_speaks_generated_reply() {
+    use std::{io::Write, process::Stdio};
+    let f = Fixture::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    std::fs::write(f.0.join("recording.wav"), [1, 2, 3]).unwrap();
+    let mut child = f
+        .command()
+        .env(
+            "LH_PLUGIN_PATH",
+            std::env::join_paths([
+                root.join("plugins/mock-backend"),
+                root.join("tests/fixtures/mock-pack"),
+                root.join("tests/fixtures/audio-pack"),
+            ])
+            .unwrap(),
+        )
+        .args(["chat", "--model", "mock-transcribe"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child.stdin.take().unwrap().write_all(b"/audio recording.wav\nsummarize\n/model mock-text\n/speak\nspoken reply\n/speak\n/quit\n").unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("Mock transcript"), "{text}");
+    assert!(text.contains("spoken reply"), "{text}");
+    let wav = text.lines().find(|s| s.starts_with("lh-speech-")).unwrap();
+    let bytes = std::fs::read(f.0.join(wav)).unwrap();
+    assert_eq!(&bytes[..4], b"RIFF");
+}
+
+#[test]
 fn eval_sessions_inherit_media_clear_explicitly_and_baseline_counts_calls() {
     let f = Fixture::new();
     let cases = f.0.join("conversation.jsonl");

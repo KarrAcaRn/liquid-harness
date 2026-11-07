@@ -1,0 +1,259 @@
+[
+  {
+    "operation": "text",
+    "command": [
+      "curl",
+      "--silent",
+      "--show-error",
+      "--fail-with-body",
+      "--max-time",
+      "150",
+      "-D",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/text.headers",
+      "-o",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/text.body",
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      "@/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/text.request.json",
+      "http://127.0.0.1:33733/v1/chat/completions"
+    ],
+    "seconds": 13.065,
+    "load_before": "7.83 7.77 6.39 1/2095 2032929",
+    "load_after": "7.81 7.76 6.41 3/2156 2033031",
+    "returncode": 0,
+    "headers": "HTTP/1.1 200 OK\ncontent-type: text/event-stream\ncache-control: no-cache\nx-accel-buffering: no\nx-lh-route: lfm3-text;p=0.9956537651950104;stage=decision-model\ntransfer-encoding: chunked\ndate: Sat, 07 Nov 2026 21:54:03 GMT\n\n",
+    "response": "data: {\"choices\":[{\"delta\":{\"content\":null,\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088447,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"A\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088447,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" Rust\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088447,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" `\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088447,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"M\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088447,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"utex\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088447,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"`\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" is\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" a\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" synchronized\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\",\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" thread\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"-safe\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" wrapper\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" around\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" data\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088448,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" that\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" allows\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" only\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" one\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" owner\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" to\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" access\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" the\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088449,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" protected\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" state\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" at\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" a\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" time\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\",\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" using\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" interior\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" mut\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088450,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ability\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" and\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" lock\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"ing\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" mechanisms\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\".\"},\"finish_reason\":null,\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":null,\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1794088451,\"id\":\"chatcmpl-1794088438-1\",\"model\":\"lfm3-text\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n"
+  },
+  {
+    "operation": "image",
+    "command": [
+      "curl",
+      "--silent",
+      "--show-error",
+      "--fail-with-body",
+      "--max-time",
+      "150",
+      "-D",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/image.headers",
+      "-o",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/image.body",
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      "@/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/image.request.json",
+      "http://127.0.0.1:33733/v1/chat/completions"
+    ],
+    "seconds": 8.26,
+    "load_before": "7.81 7.76 6.41 3/2156 2033031",
+    "load_after": "7.56 7.70 6.40 1/2146 2033085",
+    "returncode": 0,
+    "headers": "HTTP/1.1 200 OK\ncontent-type: application/json\nx-lh-route: lfm3-vl;p=1;stage=single-candidate\ncontent-length: 330\ndate: Sat, 07 Nov 2026 21:54:19 GMT\n\n",
+    "response": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"The colored shape is a square.\",\"role\":\"assistant\"}}],\"created\":1794088459,\"id\":\"chatcmpl-1794088451-2\",\"model\":\"lfm3-vl\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":8,\"prompt_tokens\":85,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_tokens\":93}}"
+  },
+  {
+    "operation": "speech",
+    "command": [
+      "curl",
+      "--silent",
+      "--show-error",
+      "--fail-with-body",
+      "--max-time",
+      "150",
+      "-D",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/speech.headers",
+      "-o",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/speech.body",
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      "@/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/speech.request.json",
+      "http://127.0.0.1:33733/v1/audio/speech"
+    ],
+    "seconds": 17.515,
+    "load_before": "7.56 7.70 6.40 2/2146 2033085",
+    "load_after": "7.56 7.71 6.43 1/2148 2033314",
+    "returncode": 0,
+    "headers": "HTTP/1.1 200 OK\ncontent-type: audio/wav\nx-lh-route: lfm3-speak;p=1;stage=explicit-load\ncontent-length: 138284\ndate: Sat, 07 Nov 2026 21:54:37 GMT\n\n",
+    "sample_rate": 24000,
+    "duration_ms": 2880
+  },
+  {
+    "operation": "transcription",
+    "command": [
+      "curl",
+      "--silent",
+      "--show-error",
+      "--fail-with-body",
+      "--max-time",
+      "150",
+      "-D",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/transcription.headers",
+      "-o",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/transcription.body",
+      "-F",
+      "file=@/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/speech.body",
+      "-F",
+      "model=auto",
+      "-F",
+      "language=en",
+      "http://127.0.0.1:33733/v1/audio/transcriptions"
+    ],
+    "seconds": 6.372,
+    "load_before": "7.56 7.71 6.43 2/2148 2033314",
+    "load_after": "7.67 7.73 6.44 3/2177 2033364",
+    "returncode": 0,
+    "headers": "HTTP/1.1 200 OK\ncontent-type: application/json\nx-lh-route: lfm3-audio;p=1;stage=explicit-load\ncontent-length: 61\ndate: Sat, 07 Nov 2026 21:54:43 GMT\n\n",
+    "response": "{\"language\":\"en\",\"text\":\"Hello world. This is a short test.\"}"
+  },
+  {
+    "operation": "audio-chat",
+    "command": [
+      "curl",
+      "--silent",
+      "--show-error",
+      "--fail-with-body",
+      "--max-time",
+      "150",
+      "-D",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/audio-chat.headers",
+      "-o",
+      "/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/audio-chat.body",
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      "@/opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/audio-chat.request.json",
+      "http://127.0.0.1:33733/v1/chat/completions"
+    ],
+    "seconds": 9.15,
+    "load_before": "7.67 7.73 6.44 1/2177 2033364",
+    "load_after": "7.36 7.66 6.43 3/2149 2033422",
+    "returncode": 0,
+    "headers": "HTTP/1.1 200 OK\ncontent-type: application/json\nx-lh-route: lfm3-audio;p=1;stage=single-candidate\ncontent-length: 359\ndate: Sat, 07 Nov 2026 21:54:53 GMT\n\n",
+    "response": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"The speaker says: \\\"Hello world this is a short test.\\\"\",\"role\":\"assistant\"}}],\"created\":1794088493,\"id\":\"chatcmpl-1794088483-3\",\"model\":\"lfm3-audio\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":14,\"prompt_tokens\":33,\"prompt_tokens_details\":{\"cached_tokens\":0},\"total_tokens\":47}}"
+  },
+  {
+    "operation": "chat-three-turns",
+    "script": "Explain a Rust mutex in one short sentence.\n/image /opt/data/home/projects/liquid-harness/.worktrees/t_c6408d62/target/m3b-smoke/square.png\nDescribe the colored shape in one sentence.\nWhat color was it? Answer briefly.\n/explain\n/quit\n",
+    "seconds": 34.025,
+    "load_before": "7.36 7.66 6.43 3/2080 2033427",
+    "load_after": "7.87 7.75 6.51 4/2083 2033610",
+    "returncode": 0,
+    "stdout": "A Rust `Mutex` is a thread-safe lock that allows only one owner to access mutable data at a time, preventing race conditions and ensuring synchronized concurrent access.\nThe shape is a red square with equal width and height, centered on a light background.\nRed.\n",
+    "routes": [
+      {
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ],
+        "model_called": true,
+        "specialist": "lfm3-text",
+        "backend": "llamacpp",
+        "confidence": 0.995677935067543,
+        "scores": {
+          "lfm3-speak": 0.0043220649324570695,
+          "lfm3-text": 0.995677935067543
+        },
+        "reason": "decision-model",
+        "extras": {},
+        "router_ms": 5483
+      },
+      {
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ],
+        "model_called": false,
+        "specialist": "lfm3-vl",
+        "backend": "llamacpp",
+        "confidence": 1.0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "reason": "single-candidate",
+        "extras": {},
+        "router_ms": 0
+      },
+      {
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ],
+        "model_called": false,
+        "specialist": "lfm3-vl",
+        "backend": "llamacpp",
+        "confidence": 1.0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "reason": "single-candidate",
+        "extras": {},
+        "router_ms": 0
+      }
+    ]
+  },
+  {
+    "operation": "chat-sticky-two-turns",
+    "script": "Explain a Rust mutex in one short sentence.\nGive one short example.\n/explain\n/quit\n",
+    "seconds": 24.131,
+    "load_before": "3.52 6.72 6.66 2/2161 2040688",
+    "load_after": "5.11 6.80 6.69 3/2169 2040918",
+    "returncode": 0,
+    "stdout": "A Rust `Mutex` is a synchronized, thread-safe wrapper around a mutable data structure that ensures only one thread can access it at a time.\n```rust\nuse std::sync::{Arc, Mutex};\n\nfn main() {\n    let data = Arc::new(Mutex::new(0));\n    let mut guard = data.lock().unwrap();\n    guard += 1;\n}\n```\nThis locks the `Mutex` to allow atomic increment of `data`.\n",
+    "routes": [
+      {
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ],
+        "model_called": true,
+        "specialist": "lfm3-text",
+        "backend": "llamacpp",
+        "confidence": 0.995677935067543,
+        "scores": {
+          "lfm3-speak": 0.0043220649324570695,
+          "lfm3-text": 0.995677935067543
+        },
+        "reason": "decision-model",
+        "extras": {},
+        "router_ms": 5674
+      },
+      {
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky"
+        ],
+        "model_called": false,
+        "specialist": "lfm3-text",
+        "backend": "llamacpp",
+        "confidence": 1.0,
+        "scores": {
+          "lfm3-text": 1.0
+        },
+        "reason": "sticky",
+        "extras": {},
+        "router_ms": 0
+      }
+    ]
+  }
+]

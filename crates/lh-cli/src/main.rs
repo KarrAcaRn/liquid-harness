@@ -1,5 +1,9 @@
+mod conversation;
 mod inference;
+mod repl;
 mod routing_eval;
+#[cfg(feature = "server")]
+mod server;
 
 use clap::{Parser, Subcommand};
 use lh_core::{Config, Engine, Registry};
@@ -19,6 +23,17 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Commands {
+    /// Interactive line-oriented conversation with sticky routing.
+    Chat {
+        #[arg(long, default_value = "auto")]
+        model: String,
+    },
+    #[cfg(feature = "server")]
+    /// Serve the OpenAI-compatible HTTP subset.
+    Serve {
+        #[arg(long, default_value = "127.0.0.1:8484")]
+        bind: String,
+    },
     /// Route a one-shot request and stream the specialist's answer.
     Run {
         #[arg(long, default_value = "auto")]
@@ -100,6 +115,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (config, directory) = Config::load(cli.config.as_deref())?;
     let registry = Registry::discover(&config, &directory)?;
     match cli.command {
+        Commands::Chat { model } => {
+            let mut engine = Engine::new(registry, config);
+            let result = repl::run(&mut engine, model).await;
+            engine.shutdown().await;
+            result?;
+        }
+        #[cfg(feature = "server")]
+        Commands::Serve { bind } => server::serve(Engine::new(registry, config), &bind).await?,
         Commands::Run {
             model,
             image,

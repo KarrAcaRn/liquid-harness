@@ -11,8 +11,8 @@ Everything is a plugin: inference backends, specialist models, routers and tools
 Plugins are separate processes speaking JSON-RPC over stdio, so they can be written in any
 language and a crashing plugin never takes the harness down.
 
-Status: M3a implemented: llama.cpp backend, streamed text/image answers, ASR/TTS,
-model pull and routing cascade/evaluation. Chat REPL and HTTP serving are next –
+Status: M3b implemented: llama.cpp backend, streamed text/image answers, ASR/TTS,
+model pull, routing cascade/evaluation, conversation REPL and HTTP serving –
 see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Try the offline routing core
@@ -114,6 +114,92 @@ checks routing and streamed answers. Missing binaries/models produce a clean
 `SKIP`; existing llama-server processes produce an error rather than overlapping
 measurements. Requires Python 3. See [M2 results](docs/M2-RESULTS.md) and
 [evaluation details](evals/README.md).
+
+## Conversations and OpenAI-compatible serving
+
+With the real-model environment above:
+
+```sh
+lh chat --model auto
+# Plain line REPL commands:
+# /image /absolute/path/photo.png   attach to the next user turn
+# /audio /absolute/path/clip.wav    attach to the next user turn
+# /speak                           toggle WAV replies (paths printed, no playback)
+# /model lfm3-text                 force a specialist; /model auto restores routing
+# /explain                        last routing decision and ordered stages
+# /reset                          clear history, attachments and routing session
+# /quit                           shut down plugins and exit
+lh serve                         # default 127.0.0.1:8484
+```
+
+History includes previous user/assistant messages. Images remain available for
+follow-up questions; `/reset` clears them. Explicitly switching to a text model
+omits old incompatible media from its request while preserving textual history.
+New incompatible attachments are rejected, not silently dropped. Audio chat
+transcribes then answers using the default text specialist (vision if pictures
+are also present); the REPL keeps transcripts rather than retranscribing old clips.
+`/speak` speaks the generated answer. Direct speech routing speaks the user text.
+
+```sh
+curl http://127.0.0.1:8484/v1/models
+curl -N http://127.0.0.1:8484/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"auto","stream":true,"messages":[{"role":"user","content":"Explain a Rust mutex briefly."}]}'
+curl http://127.0.0.1:8484/v1/audio/transcriptions \
+  -F model=auto -F file=@recording.wav -F language=en
+curl http://127.0.0.1:8484/v1/audio/speech \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"auto","input":"Hello world","response_format":"wav"}' -o hello.wav
+```
+
+Chat accepts OpenAI `image_url` base64 data URLs and `input_audio` parts containing
+base64 `data` and a `format` such as `wav` or `mp3`. Remote URLs and filesystem
+references are rejected by HTTP endpoints. Send the complete history on every
+HTTP request: HTTP has no server-side conversation sessions; the routing cache
+still applies. Responses expose `x-lh-route: ID;p=CONFIDENCE;stage=REASON`.
+The audio pipeline header identifies the input/ASR specialist, not the second
+chat stage. `/v1/route` accepts `RouteInput`; `/v1/decide` accepts `state`,
+`questions`, optional data-URL `images`, and optional `model` naming a router
+(default configured router) or a decide specialist.
+
+Optional authentication is enabled in the harness config, with the token supplied
+only through the named environment variable:
+
+```toml
+server_token_env = "LH_API_TOKEN"
+```
+
+When configured, a missing/empty variable prevents startup and every endpoint
+requires `Authorization: Bearer ...`. Keep the default localhost bind; nonlocal
+binding has no built-in TLS. Ctrl-C shuts down owned backends. HTTP/1 support is
+the default `server` Cargo feature; omit it with
+`cargo build -p lh-cli --release --no-default-features`.
+
+### Hermes provider example (documentation only)
+
+Using Hermes' [custom-provider model aliases](https://hermes-agent.nousresearch.com/docs/integrations/providers),
+an example configuration is:
+
+```yaml
+model_aliases:
+  liquid:
+    provider: custom
+    model: auto
+    base_url: http://127.0.0.1:8484/v1
+    api_key: local  # non-secret placeholder when harness authentication is off
+```
+
+Select `/model liquid` in Hermes. With authentication enabled, replace the
+placeholder with `key_env: LH_API_TOKEN` and supply the same token securely to
+both processes. No Hermes configuration is changed by this repository or its
+tests. For Open WebUI use the same OpenAI base URL/model; containers need an
+explicit host networking/reachability arrangement rather than container localhost.
+This is an OpenAI subset, not a claim of full Hermes/Open WebUI end-to-end testing.
+Tool definitions/deltas pass through; tool execution remains the client's job.
+
+Run `LH_BIN="$PWD/target/release/lh" python3 scripts/smoke_chat.py` for bounded,
+cached-model curl and three-turn REPL acceptance. See [M3b results](docs/M3B-RESULTS.md)
+for routes, timings, binary sizes and compatibility limitations.
 
 ## License
 
