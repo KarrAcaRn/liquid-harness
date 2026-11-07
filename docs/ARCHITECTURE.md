@@ -1,6 +1,6 @@
 # liquid-harness – Architecture
 
-Status: design baseline (v0). This document is the contract for implementation work.
+Status: M1 implemented (offline routing core). Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
 ## 1. Goals
@@ -50,8 +50,10 @@ Change it in the same commit when a decision changes.
 ## 3. Plugin layout and manifest
 
 A plugin is a directory with a `plugin.toml`. Search path, in order:
-`$LH_PLUGIN_PATH` (colon separated), `<config dir>/plugins`, `./plugins`.
-First match by `id` wins.
+`$LH_PLUGIN_PATH` (platform-separated), configured `plugin_path` entries,
+`<config dir>/plugins`, `./plugins`. Entries may name a plugin directory or its
+parent pack directory. Repeated canonical manifest paths are read once; distinct
+files declaring the same ID are a startup error (there is no first-ID-wins override).
 
 ```toml
 # plugins/backend-llamacpp/plugin.toml
@@ -115,7 +117,9 @@ min_confidence = 0.55
 
 Rules for manifests:
 - `id`s are globally unique across all loaded plugins; duplicates are a startup error naming both files.
-- Unknown keys are an error (`deny_unknown_fields`) so typos surface immediately.
+- Unknown manifest metadata keys are an error (`deny_unknown_fields`) so typos surface
+  immediately. `[config]` is deliberately an arbitrary plugin-owned map, as are sampling
+  `params`; backend-specific configuration validation belongs to that plugin.
 - `model.source` schemes: `hf:<repo>:<quant>` (llama.cpp `-hf` semantics) and `file:<path>`.
 
 ## 4. Protocol (version 1)
@@ -127,7 +131,7 @@ Streaming results are sent as notifications before the final response.
 |-------------------------|------------------------------------------------------------|--------|
 | `initialize`            | `{protocol: 1, plugin_id, config, core_version}`            | `{name, version, provides, capabilities}` |
 | `shutdown` (notification)| –                                                         | – |
-| `backend/load`          | `{key, model: ModelSpec}`                                   | `{key, ready: true, info}` |
+| `backend/load`          | `{key, model: ModelSpec, pinned?: bool}`                    | `{key, ready: true, info}` |
 | `backend/unload`        | `{key}`                                                     | `{}` |
 | `backend/chat`          | `{key, messages, tools?, params, stream: bool}`             | `{message, finish_reason, usage}` |
 | `backend/decide`        | `{key, state, images?, files?, questions}`                  | `{answers}` (d1 `/v1/systemone` shape) |
@@ -140,6 +144,26 @@ Streaming results are sent as notifications before the final response.
 | `$/stream`                   | `{id, delta: {content?, tool_calls?}}` – chunk for request `id` |
 | `$/log`                      | `{level, message}` |
 | `$/progress`                 | `{id, message, fraction?}` – e.g. model download |
+
+M1 transport details:
+- Frames are bounded to 8 MiB including the newline. Invalid envelopes, unknown
+  response IDs, EOF, or a 30-second call/handshake timeout fail that process generation.
+  In-flight requests fail together and are never replayed. The initial start is free;
+  at most three restart attempts are allowed in a rolling 60-second window.
+- The host correlates concurrent calls, accepts out-of-order responses, and exposes
+  notifications via a bounded broadcast subscription (256 entries; lag is reported).
+  A dedicated ordered writer avoids stdin/stdout backpressure deadlocks. At most
+  64 calls are in flight per plugin; excess calls fail with `-32002` rather than
+  blocking response processing. Oversized outgoing requests fail with `-32602`.
+  Shutdown sends a notification, waits briefly, then kills/reaps an uncooperative child.
+  Applications should await `Host::shutdown`/`Engine::shutdown` before dropping their runtime.
+- The SDK is intentionally blocking and serial: cancellation cannot interrupt an
+  active handler. `$/cancel` is ignored in M1; cancellable inference is future work.
+- Decision DTOs follow llama.cpp b12189 `/v1/systemone`: choice criteria are an ID-to-text
+  map, score criteria an ordered string array, and noul asks a yes/no question.
+  Answers use `noul`, `choice` (with confidence/probabilities), or `score` (with
+  confidence/probabilities/legend), not a generic value wrapper. M1 accepts text state
+  and string attachment references; richer d1 state/criteria variants can be added later.
 
 - `messages` use the OpenAI chat format (`role`, `content` as string or parts with
   `type: text | image_url | input_audio`, `tool_calls`, `tool_call_id`). The core
@@ -190,6 +214,14 @@ Request ─► 1. explicit? ──yes──► specialist by id/alias
   candidate after the modality filter, and sticky routing skip the model call.
 - Sticky routing: within one conversation the previous specialist is kept unless
   the new turn changes modality or the router is ≥ 0.8 confident in another one.
+  M1 exposes this as a pure function; conversation state and pre-call sticky shortcuts
+  belong to M3. Explicit specialists still undergo modality validation.
+- If the configured default is not a modality-compatible candidate, M1 uses the first
+  compatible ID in lexical order. Low-confidence decisions preserve the winning model
+  probability and full original score distribution, even when the specialist is replaced.
+  The router load is idempotent and requested before each decision, with `pinned: true`,
+  so a restarted backend can recover its state. Exactly one decide call follows the load.
+  M1 routes a single user turn; summaries and optional extra questions remain future work.
 
 ## 6. Crates
 
@@ -200,12 +232,14 @@ crates/lh-plugin-sdk  Write Rust plugins in ~30 lines: blocking stdio loop, meth
                       dispatch, stream/log helpers. std + lh-protocol only.
 crates/lh-core        Plugin discovery + host (tokio process/io), registry, router
                       engine, orchestrator, config. No HTTP.
-crates/lh-cli         Binary `lh`. Subcommands below. HTTP server behind cargo
-                      feature `server` (default on).
+crates/lh-cli         Binary `lh`. M1 exposes plugins list and route only. HTTP server
+                      and its feature flags are deferred to M3.
 plugins/backend-llamacpp  Binary `lh-backend-llamacpp`: spawns/stops llama-server per
                       model on a free localhost port, health-waits, LRU/TTL unload,
                       proxies chat (SSE → `$/stream`) and decide (`/v1/systemone`).
-plugins/mock-backend  Deterministic backend for tests (chat echo, decide via keyword table).
+plugins/mock-backend  Deterministic backend (Unicode echo/three stream chunks,
+                      decide via case-insensitive word overlap, with normalized scores).
+plugins/mock-pack     Offline text/vision/audio specialists and mock-router fixture.
 plugins/lfm3          Manifest-only specialist + router pack.
 ```
 
@@ -249,6 +283,14 @@ llama_server = "/opt/llama.cpp/llama-server"
 threads = 8
 ```
 
+M1 defaults to `router = "rules"` and `default_specialist = "mock-text"` so the
+included fixture pack works without configuration. Precedence is `--config`, then
+`LH_CONFIG`, then the XDG default (`$HOME/.config` if XDG_CONFIG_HOME is unset).
+An explicitly named missing file is an error; a missing default file uses defaults.
+Relative `plugin_path` entries are relative to the configuration file. When a config
+file is overridden, its parent directory supplies the adjacent `plugins` search path.
+User `[plugins.<id>.config]` settings shallowly override manifest `[config]` keys.
+
 ## 10. Testing
 
 - Unit tests per crate; integration tests spawn the real `mock-backend` binary through the
@@ -260,10 +302,10 @@ threads = 8
 
 ## 11. Milestones
 
-- **M1 – Routing core:** protocol, SDK, plugin host, mock backend, `rules` router,
+- **M1 – Routing core:** protocol, SDK, plugin host, mock backend, `rules` and `decision-model` routers,
   `lh plugins list`, `lh route`. Offline tests green.
 - **M2 – d1 router on llama.cpp:** llama.cpp backend (load/unload/decide/chat), lfm3 pack,
-  `decision-model` strategy, `lh run`, routing eval with ≥ 30 prompts, smoke script.
+  real-model `decision-model` integration, `lh run`, routing eval with ≥ 30 prompts, smoke script.
 - **M3 – Specialists end-to-end:** text + vision chat streaming, `lh chat` REPL, sticky routing,
   `lh serve` OpenAI API.
 - **M4 – Audio & tools:** LFM3-Audio (ASR/TTS), d1-Omni router, MCP tool plugins with the

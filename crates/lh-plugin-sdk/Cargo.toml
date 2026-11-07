@@ -1,0 +1,7 @@
+[package]
+name = "lh-plugin-sdk"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+lh-protocol = { path = "../lh-protocol" }

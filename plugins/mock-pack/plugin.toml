@@ -1,0 +1,41 @@
+[plugin]
+id = "mock-pack"
+version = "0.1.0"
+protocol = 1
+description = "Offline text, vision and audio routing fixtures"
+provides = ["specialist", "router"]
+
+[[specialist]]
+id = "mock-text"
+route = "General conversation questions writing reasoning coding programming planning tools"
+task = "chat"
+inputs = ["text"]
+outputs = ["text"]
+backend = "mock"
+model = { source = "file:mock-text" }
+
+[[specialist]]
+id = "mock-vision"
+route = "Picture screenshot photo image chart scanned document visual analysis"
+task = "chat"
+inputs = ["text", "image"]
+outputs = ["text"]
+backend = "mock"
+model = { source = "file:mock-vision" }
+
+[[specialist]]
+id = "mock-audio"
+route = "Audio speech sound music recording transcribe spoken voice"
+task = "chat"
+inputs = ["text", "audio"]
+outputs = ["text"]
+backend = "mock"
+model = { source = "file:mock-audio" }
+
+[router]
+id = "mock-router"
+strategy = "decision-model"
+backend = "mock"
+model = { source = "file:mock-router" }
+inputs = ["text", "image", "audio"]
+min_confidence = 0.55

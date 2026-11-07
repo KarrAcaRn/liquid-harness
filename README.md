@@ -11,7 +11,44 @@ Everything is a plugin: inference backends, specialist models, routers and tools
 Plugins are separate processes speaking JSON-RPC over stdio, so they can be written in any
 language and a crashing plugin never takes the harness down.
 
-Status: early design – see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Status: M1 offline routing core implemented. Real inference, chat and HTTP serving
+are later milestones – see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Try the offline routing core
+
+Requires Rust 1.99+ (edition 2024). From the repository root:
+
+```sh
+cargo build --workspace --release
+export PATH="$PWD/target/release:$PATH"
+lh plugins list
+lh route --explain --router mock-router "coding programming tools"
+lh route --image picture.png "describe this"
+lh route --audio voice.wav "transcribe this"
+```
+
+The mock backend needs no models or network. `--image`/`--audio` attach references
+for routing; M1 does not open or encode these files. Plain routing defaults to
+deterministic rules; `--router mock-router` exercises the JSON-RPC decision backend.
+The built-in pack exposes `mock-text`, `mock-vision`, and `mock-audio`.
+
+Plugin search: `LH_PLUGIN_PATH`, configured `plugin_path`, the config directory's
+`plugins`, and `./plugins`. Commands resolve beside their manifest first, then on
+`PATH`. Configuration is read from `$XDG_CONFIG_HOME/liquid-harness/config.toml`
+(or `$HOME/.config/liquid-harness/config.toml`); override with `--config` or `LH_CONFIG`.
+
+```sh
+# Fetch build dependencies once, then all tests/builds work offline.
+cargo fetch
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --offline -- -D warnings
+cargo test --workspace --offline
+```
+
+Integration tests spawn the actual mock executable, including crash/restart,
+timeouts, concurrent RPC correlation, streaming, routing and configuration tests.
+No test launches llama-server or downloads models. The SDK is blocking and cannot
+interrupt a handler for cancellation; external router plugins are deferred.
 
 ## License
 

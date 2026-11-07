@@ -1,0 +1,10 @@
+[plugin]
+id = "mock"
+version = "0.1.0"
+protocol = 1
+description = "Offline deterministic echo and keyword decision backend"
+provides = ["backend"]
+
+[run]
+command = "lh-mock-backend"
+args = []

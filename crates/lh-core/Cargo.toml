@@ -1,0 +1,9 @@
+[package]
+name = "lh-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+lh-protocol.workspace = true
+serde.workspace = true
+tokio.workspace = true

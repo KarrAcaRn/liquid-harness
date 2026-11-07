@@ -1,0 +1,12 @@
+[package]
+name = "lh-mock-backend"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+lh-protocol.workspace = true
+lh-plugin-sdk.workspace = true
+
+[dev-dependencies]
+lh-core.workspace = true
+tokio.workspace = true

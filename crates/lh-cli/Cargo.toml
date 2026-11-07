@@ -1,0 +1,14 @@
+[package]
+name = "lh-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "lh"
+path = "src/main.rs"
+
+[dependencies]
+lh-core.workspace = true
+lh-protocol.workspace = true
+tokio.workspace = true
+clap.workspace = true
