@@ -286,10 +286,12 @@ fn sdk_speak_status_and_lazy_http_restart() {
         .unwrap()
         .models
         .insert("audio".into(), resident(false, 0));
+    // load_timeout_secs covers re-exec fixture startup under host load (setup,
+    // not behavior under test); same 5 s headroom as the FreeToken fixtures.
     let frames = [
         (
             "initialize",
-            json!({"protocol":1,"config":{"llama_server":server,"llama_tts":tts,"request_timeout_secs":2,"load_timeout_secs":2}}),
+            json!({"protocol":1,"config":{"llama_server":server,"llama_tts":tts,"request_timeout_secs":2,"load_timeout_secs":5}}),
         ),
         ("backend/speak", json!({"key":"audio","text":"hello"})),
         ("backend/status", json!({})),

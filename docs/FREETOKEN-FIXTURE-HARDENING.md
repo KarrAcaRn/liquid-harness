@@ -62,6 +62,46 @@ libtest default parallelism; repetitions run sequentially. Focused load average
 These are functional checks under host load, not latency benchmarks. Raw command
 logs and per-run load/exit/test-count metadata are in the task's validation archive.
 
+## Follow-up: integration test `tests/process.rs` (task `t_c4ba53c4`)
+
+Review `t_601eb1ba` found the sibling integration test
+`binary_spawn_stream_and_shutdown` still used the same `fake_ft.py` with a
+three-second `load_timeout_secs`: 2 of 10 default-parallel workspace runs at
+`3e4543a` failed with the readiness timeout during `backend/load` at load
+average 10.4-16.2, and each failure leaked its `lh-ft-process-<pid>` temp dir.
+
+- The budget now lives in test-only `src/fixture_budget.rs`
+  (`FIXTURE_STARTUP_SECS` = 5), included via `#[path]` by both `src/tests.rs`
+  and `tests/process.rs`, so the two fixtures cannot drift apart. It is setup
+  headroom only; the test asserts serving, stream delta, `$/progress` and that
+  the server pid is dead after shutdown, all unchanged.
+- A `TempDir` guard removes the fixture directory on every exit path. On panic
+  it first SIGKILLs the recorded fake `ft` process group (spawned with
+  `setpgid`), which a killed plugin can no longer clean up.
+- A `Plugin` guard kills and reaps the plugin child if it is still running on
+  unwind. Stdout/stderr are drained by reader threads so the child stays owned
+  by the guard instead of being consumed by `wait_with_output`.
+- Class sweep: the only other spawned-fixture load budget in the workspace,
+  `backend-llamacpp` `sdk_speak_status_and_lazy_http_restart`
+  (`load_timeout_secs` 2 for a re-exec fake server), was raised to 5 s with the
+  same rationale. Other short timeouts in tests deliberately test timeout
+  behavior (`tools-web` `timeout_secs`, the 500 ms readiness test) and stay.
+- Failure path checked by temporarily forcing `FT_TEST_STATE=loading`: the test
+  failed after 5.01 s, and no `lh-ft-process-*` dir and no fake `ft` from it
+  remained. The two dirs leaked by the review runs were deleted.
+
+Validation (no serial workaround, `RUST_TEST_THREADS` unset, sequential runs):
+
+| Group | Runs | Results | Tests per run | Load 1/5/15 begin -> end |
+| --- | --- | --- | --- | --- |
+| `cargo test -p lh-backend-freetoken --offline` | 10 | 10 passed, 0 failed | 17 | 6.23/6.07/4.75 -> 3.64/5.31/4.58 |
+| `cargo test --workspace --offline` | 10 | 10 passed, 0 failed | 138 | 3.64/5.31/4.58 -> 5.42/7.82/5.86 |
+
+Workspace run 1 includes compilation (load 18.56 afterwards; runs 2-4 started
+at 18.56, 16.18 and 14.54, within or above the review's failing range). A concurrent
+`coder` profile test run was active on the host during validation. No fixture
+directories remained afterwards.
+
 ## Remaining limits
 
 Eight repetitions do not prove absence of every timing failure. Arbitrary host

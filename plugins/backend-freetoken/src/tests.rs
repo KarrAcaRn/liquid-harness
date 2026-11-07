@@ -367,8 +367,9 @@ fn idle_worker_reaps_only_unpinned() {
     }
 }
 
-// Interpreter imports and scheduling are setup, not the readiness behavior under test.
-const FIXTURE_STARTUP_SECS: u64 = 5;
+#[path = "fixture_budget.rs"]
+mod fixture_budget;
+use fixture_budget::FIXTURE_STARTUP_SECS;
 const READINESS_TIMEOUT: Duration = Duration::from_millis(500);
 const TIMEOUT_MESSAGE: &str = "FreeToken readiness timeout (cache state is not serving)";
 

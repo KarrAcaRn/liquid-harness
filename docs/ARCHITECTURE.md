@@ -614,7 +614,9 @@ User `[plugins.<id>.config]` settings shallowly override manifest `[config]` key
 
 - Unit tests per crate; integration tests spawn the real `mock-backend` binary through the
   plugin host (no models needed). `cargo test --workspace` must pass offline.
-- FreeToken spawn unit fixtures allow five seconds for interpreter/server startup.
+- FreeToken spawn fixtures (unit tests and `tests/process.rs`) share the test-only
+  `FIXTURE_STARTUP_SECS` = 5 s budget for interpreter/server startup; the
+  integration test owns its temp dir and plugin child with RAII guards.
   A separate already-listening, confirmed-loading fixture tests a 500 ms readiness
   deadline; startup delay (>1 s), failed-load registration and process-group cleanup
   remain covered. Production timeouts are unchanged. See
