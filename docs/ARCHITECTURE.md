@@ -1,7 +1,7 @@
 # liquid-harness – Architecture
 
-Status: M2, M2b and M2c implemented (llama.cpp and opt-in FreeToken backends,
-capability-aware fallback, routing cascade, sessions and held-out evaluation).
+Status: M2, M2b, M2c and M3a implemented (llama.cpp and opt-in FreeToken backends,
+capability-aware fallback, routing cascade, sessions, evaluation and audio ASR/TTS).
 Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
@@ -167,6 +167,8 @@ Streaming results are sent as notifications before the final response.
 | `backend/load`          | `{key, model: ModelSpec, pinned?: bool}`                    | `{key, ready: true, info}` |
 | `backend/unload`        | `{key}`                                                     | `{}` |
 | `backend/chat`          | `{key, messages, tools?, params, stream: bool}`             | `{message, finish_reason, usage}` |
+| `backend/transcribe`    | `{key, audio: local-path-or-data-URL, language?}`           | `{text, language?}` |
+| `backend/speak`         | `{key, text, voice?, language?}`                           | `{audio: WAV-path-or-data-URL, sample_rate, duration_ms}` |
 | `backend/decide`        | `{key, state, images?, files?, questions}`                  | `{answers}` (d1 `/v1/systemone` shape) |
 | `backend/status`        | `{}`                                                        | `{loaded: [{key, pid, port, idle_secs}]}` |
 | `router/route`          | `{request: RouteInput, candidates: [Candidate]}`            | `RouteDecision` |
@@ -179,9 +181,9 @@ Streaming results are sent as notifications before the final response.
 | `$/progress`                 | `{id, message, fraction?}` – e.g. model download |
 
 Initialize `capabilities` is an array of strings: FreeToken returns `["chat"]`,
-llama.cpp/mock return `["chat", "decide", "stream"]`. The host also accepts the
+llama.cpp/mock return `["chat", "decide", "stream", "transcribe", "speak"]`. The host also accepts the
 legacy boolean map and normalizes true entries. Capabilities are refreshed on
-every process generation. It rejects unsupported chat/decide calls before they
+every process generation. It rejects unsupported chat/decide/transcribe/speak calls before they
 reach the plugin. A decision-model router checks `decide` before loading; its
 error names both router and backend. FreeToken itself returns -32003 for decide.
 
@@ -278,7 +280,7 @@ No new dependency: literal phrase matching avoids regex binary/dependency cost.
 
 LFM3-VL requires images; `lfm3-audio` requires audio for transcription/listening.
 `lfm3-speak` is a separate text-input TTS specialist using the same audio model.
-Both audio tasks remain routing-only until M4. The mock specialist pack is now
+Both audio tasks execute end-to-end in M3a. The mock specialist pack is now
 `tests/fixtures/mock-pack`, discovered only by explicit test/demo paths, never
 by default repository discovery. The default rules specialist is `lfm3-text`.
 
@@ -331,10 +333,60 @@ behavior. SSE requires `[DONE]` and a finish reason, aggregates text/tool deltas
 and usage, and bounds total input to 8 MiB.
 
 The LFM3 pack enables text-only d1 routing: image/audio attachments select their
-sole compatible specialist without loading d1 or a router projector. Audio is
-manifest/routing-only; `lh run` rejects non-chat specialist tasks until M4.
+sole compatible specialist without loading d1 or a router projector. Audio
+transcription uses the audio projector and a greedy ASR system prompt.
 LFM3 chat disables thinking by default to avoid an invisible reasoning-only
 answer exhausting the short completion budget (256 tokens, overridable in pack).
+
+### M3a audio execution
+
+`task_method` maps chat/decide/transcribe/speak to the corresponding backend method;
+unknown tasks are rejected during registry validation. `Engine::prepare` loads a
+specialist without routing (including `models pull` for specialists requiring media).
+`Engine::dispatch` overwrites the request key with the selected specialist ID and
+checks the selected backend belongs to its configured choices. It does not reroute
+or retry inference. Clients must load first and own stream subscriptions.
+
+`lh run --audio F [prompt]` uses normal modality/cascade routing. The shipped pack
+has one audio-input specialist, so it transcribes even if prompt contains a question.
+For a question about a recording use `--audio-question`: explicitly transcribe,
+then send the transcript and question to the configured default text/chat specialist.
+This is an explicit two-step pipeline, not an unreliable question-mark heuristic.
+Custom audio-capable chat specialists receive `input_audio` parts directly.
+The pipeline does not interpret acoustic features, music or speaker identity.
+
+`--speak-out out.wav` selects the unique speak specialist when model is auto;
+with multiple speak specialists select `--model`. Otherwise phrase hints such as
+`read this aloud`, `vorlesen`, or `lies das vor` select speech through the cascade.
+Speech receives the complete prompt verbatim (including any instruction prefix).
+Without `--speak-out`, speech writes a unique `lh-speech-*.wav` in the current
+directory. Existing output paths are never overwritten. `--language` supplies an
+ASR hint / TTS language code; `--voice` is passed to llama-tts (female/male).
+CLI stdout is the transcript, streamed answer or WAV path; route traces use stderr.
+
+The backend accepts local paths or base64 audio data URLs. PCM/float RIFF WAV is
+validated; other encodings use `ffmpeg` from PATH or `[config] ffmpeg`, converted
+to mono 16 kHz PCM16. Missing ffmpeg is a clear error. Audio is bounded below
+5 MiB for the 8 MiB RPC framing limit. Returned audio is a WAV data URL with
+metadata parsed from RIFF chunks. The requested language is echoed, not detected.
+
+ASR uses `/v1/chat/completions`, `input_audio`, temperature zero, and `Perform ASR.`
+or `Perform ASR in <language>.`. TTS uses the documented `llama-tts` one-shot
+executable, rather than implementing the realtime WebSocket protocol. Configure
+`llama_tts` or install beside path-valued `llama_server` (otherwise PATH lookup).
+Both shipped audio ModelSpecs set `mmproj = "auto"`; file sources need an explicit
+projector. See [backend audio details](../plugins/backend-llamacpp/AUDIO.md).
+
+TTS and ASR cannot share one live inference process with this adapter: llama-tts
+owns synthesis. Initial load starts a server; TTS stops same-source unpinned
+servers before loading its one-shot process. Registrations remain in LRU/TTL;
+the next ASR lazily starts its server again. Pinning a matching source forbids TTS.
+Different specialist keys are not general-purpose resident aliases. Consequently
+switching incurs cold-load overhead; repeated TTS avoids repeated server startup.
+The backend mutex prevents inference overlap; other model sources may stay resident.
+Temporary files are private and removed on success/error/timeout, and subprocesses
+are killed/reaped on timeout. Serial SDK cancellation and crash limitations remain.
+No HTTP/inference dependency was added to core; base64 was added to backend/mock.
 
 The original M1/M2 model path is shown below for protocol context; M2c inserts
 the cascade described above between modality filtering and this model path.
@@ -418,6 +470,9 @@ keeps the binary smaller. HTTP client in the llama.cpp plugin: `ureq` (blocking,
 lh plugins list                      # discovered plugins, specialists, router, status
 lh route [--explain] [--image F] [--audio F] "prompt"   # routing only, prints RouteDecision JSON
 lh run   [--model ID|auto] [--image F] "prompt"         # one-shot, streams answer to stdout
+lh run --audio recording.wav [--language en]           # transcription
+lh run --audio recording.wav --audio-question "Summarize the recording"
+lh run --speak-out out.wav --language de "Guten Morgen" # text verbatim to speech
 lh chat  [--model ID|auto]           # REPL; /model, /explain, /reset
 lh serve [--bind 127.0.0.1:8484]     # OpenAI-compatible API
 lh models pull <specialist-id>       # pre-download a specialist's model
@@ -466,6 +521,11 @@ User `[plugins.<id>.config]` settings shallowly override manifest `[config]` key
   finishes before the next starts, including router-only then explicit text generation.
 - `evals/routing.jsonl` + `lh eval routing`: labelled prompts → expected specialist; reports
   accuracy, confusion matrix, p50/p95 router latency. Measure alone (check `/proc/loadavg`).
+- `scripts/smoke.sh --audio --sample /path/to/jfk.wav --out /new/output/dir`:
+  sequential English/German TTS→ASR and independent JFK ASR, WAV durations,
+  normalized word edit distance, wall latency and load before/after every call.
+  No downloads; skips missing cached models. Output WAV/logs/JSON persist in `--out`.
+  See [M3a results](M3A-RESULTS.md) for measured quality and limits.
 
 ## 11. Milestones
 
@@ -496,5 +556,7 @@ accuracy, smoke output, limitations and raw measurements: [M2-RESULTS.md](M2-RES
   real-model `decision-model` integration, `lh run`, routing eval with ≥ 30 prompts, smoke script.
 - **M3 – Specialists end-to-end:** text + vision chat streaming, `lh chat` REPL, sticky routing,
   `lh serve` OpenAI API.
-- **M4 – Audio & tools:** LFM3-Audio (ASR/TTS), d1-Omni router, MCP tool plugins with the
+- **M3a – Audio specialists:** LFM3-Audio ASR/TTS, explicit recording-question pipeline,
+  audio protocol and CLI, fake/offline tests and bilingual real smoke.
+- **M4 – Extended audio & tools:** realtime audio, d1-Omni router, MCP tool plugins with the
   LFM3-1.7B agent loop.

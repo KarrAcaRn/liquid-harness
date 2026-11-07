@@ -4,7 +4,7 @@ version = "0.1.0"
 protocol = 1
 description = "Runs GGUF models via llama.cpp llama-server"
 provides = ["backend"]
-capabilities = ["chat", "decide", "stream"]
+capabilities = ["chat", "decide", "stream", "transcribe", "speak"]
 
 [run]
 command = "lh-backend-llamacpp"

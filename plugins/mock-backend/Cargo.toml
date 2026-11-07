@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 lh-protocol.workspace = true
 lh-plugin-sdk.workspace = true
+base64 = "0.22"
 
 [dev-dependencies]
 lh-core.workspace = true

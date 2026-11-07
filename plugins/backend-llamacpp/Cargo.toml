@@ -10,3 +10,4 @@ lh-protocol.workspace = true
 lh-plugin-sdk.workspace = true
 ureq = { version = "2", default-features = false, features = ["json"] }
 libc = "0.2"
+base64 = "0.22"

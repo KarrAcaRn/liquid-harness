@@ -106,6 +106,160 @@ fn eval_sessions_inherit_media_clear_explicitly_and_baseline_counts_calls() {
     assert_eq!(baseline["d1_call_rate"], 1.0);
 }
 
+#[test]
+fn audio_transcription_pipeline_speech_and_pull_are_offline() {
+    let f = Fixture::new();
+    let pack = f.0.join("plugins/audio");
+    std::fs::create_dir_all(&pack).unwrap();
+    std::fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/audio-pack/plugin.toml"),
+        pack.join("plugin.toml"),
+    )
+    .unwrap();
+    let audio = f.0.join("input.wav");
+    std::fs::write(&audio, b"mock input, not real speech").unwrap();
+    let source = audio.to_str().unwrap();
+    for args in [
+        vec!["run", "--audio", source],
+        vec![
+            "run",
+            "--audio",
+            source,
+            "--language",
+            "de",
+            "ignored question",
+        ],
+        vec!["run", "--audio", "data:audio/wav;base64,AA=="],
+    ] {
+        // Isolate the actual audio pack: the legacy mock-pack also contains an
+        // audio-chat candidate and would intentionally leave selection to rules.
+        let o = f
+            .command()
+            .env(
+                "LH_PLUGIN_PATH",
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/mock-backend"),
+            )
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        assert_eq!(
+            String::from_utf8(o.stdout).unwrap(),
+            "Mock transcript (deterministic fixture).\n"
+        );
+    }
+    let o = f
+        .command()
+        .args([
+            "run",
+            "--audio",
+            source,
+            "--audio-question",
+            "What was said?",
+        ])
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(
+        String::from_utf8(o.stdout).unwrap(),
+        "Audio transcript:\nMock transcript (deterministic fixture).\n\nQuestion:\nWhat was said?\n"
+    );
+    let o = f
+        .command()
+        .args([
+            "run",
+            "--model",
+            "mock-audio",
+            "--audio",
+            source,
+            "audio chat",
+        ])
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(o.stdout, b"audio chat\n");
+    assert_eq!(
+        output(f.command(), &["models", "pull", "mock-transcribe"])["ready"],
+        true
+    );
+    let out = f.0.join("spoken.wav");
+    let o = f
+        .command()
+        .args([
+            "run",
+            "--speak-out",
+            out.to_str().unwrap(),
+            "--language",
+            "en",
+            "--voice",
+            "fixture",
+            "hello",
+        ])
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let bytes = std::fs::read(&out).unwrap();
+    assert_eq!(&bytes[..4], b"RIFF");
+    assert_eq!(&bytes[8..12], b"WAVE");
+    assert_eq!(bytes.len(), 76);
+    assert_eq!(u32::from_le_bytes(bytes[24..28].try_into().unwrap()), 16000);
+    let mut paths = Vec::new();
+    for prompt in [
+        "vorlesen hello",
+        "lies das vor hello",
+        "read this aloud hello",
+    ] {
+        let o = f.command().args(["run", prompt]).output().unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        let path = String::from_utf8(o.stdout).unwrap().trim().to_owned();
+        assert_eq!(std::fs::read(f.0.join(&path)).unwrap(), bytes);
+        assert!(!paths.contains(&path));
+        paths.push(path);
+    }
+    failed(
+        f.command()
+            .args(["run", "--audio-question", "question"])
+            .output()
+            .unwrap(),
+        "--audio",
+    );
+    failed(
+        f.command()
+            .args(["run", "--audio", source, "--audio-question"])
+            .output()
+            .unwrap(),
+        "nonempty prompt",
+    );
+    failed(
+        f.command()
+            .args(["run", "--audio", "missing.wav"])
+            .output()
+            .unwrap(),
+        "missing.wav",
+    );
+    failed(
+        f.command()
+            .args(["run", "--speak-out", out.to_str().unwrap(), "hello"])
+            .output()
+            .unwrap(),
+        "exists",
+    );
+    failed(
+        f.command()
+            .args([
+                "run",
+                "--model",
+                "mock-text",
+                "--speak-out",
+                "x.wav",
+                "hello",
+            ])
+            .output()
+            .unwrap(),
+        "requires a speak specialist",
+    );
+}
+
 fn failed(o: Output, expected: &str) {
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains(expected));
@@ -125,7 +279,7 @@ fn list_shows_capabilities_and_opt_in_without_starting_backends() {
     assert_eq!(llama["status"], "not-started");
     assert_eq!(
         llama["capabilities"],
-        json::json!(["chat", "decide", "stream"])
+        json::json!(["chat", "decide", "stream", "transcribe", "speak"])
     );
     let config = f.0.join("enabled.toml");
     std::fs::write(&config, "[plugins.freetoken]\nenabled=true\n").unwrap();

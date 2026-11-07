@@ -333,6 +333,7 @@ dependencies = [
 name = "lh-backend-llamacpp"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "lh-plugin-sdk",
  "lh-protocol",
  "libc",
@@ -364,6 +365,7 @@ dependencies = [
 name = "lh-mock-backend"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "lh-core",
  "lh-plugin-sdk",
  "lh-protocol",

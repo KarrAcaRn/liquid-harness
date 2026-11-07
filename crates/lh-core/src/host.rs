@@ -340,7 +340,7 @@ async fn actor(
                         let _ = reply.send(Ok(json!(capabilities)));
                         continue;
                     }
-                    if let Some(capability) = method.strip_prefix("backend/").filter(|m| matches!(*m, "chat" | "decide"))
+                    if let Some(capability) = method.strip_prefix("backend/").filter(|m| matches!(*m, "chat" | "decide" | "transcribe" | "speak"))
                         && !capabilities.iter().any(|c| c == capability) {
                         let _ = reply.send(Err(Error::new(-32003, format!("backend '{}' does not support {capability}", entry.manifest.plugin.id))));
                         continue;

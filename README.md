@@ -11,8 +11,8 @@ Everything is a plugin: inference backends, specialist models, routers and tools
 Plugins are separate processes speaking JSON-RPC over stdio, so they can be written in any
 language and a crashing plugin never takes the harness down.
 
-Status: M2 implemented: llama.cpp backend, streamed text/image answers, model pull
-and routing evaluation. Audio, chat REPL and HTTP serving are later milestones –
+Status: M3a implemented: llama.cpp backend, streamed text/image answers, ASR/TTS,
+model pull and routing cascade/evaluation. Chat REPL and HTTP serving are next –
 see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Try the offline routing core
@@ -80,9 +80,33 @@ lh eval routing --file "$repo/evals/routing-heldout.jsonl"
 ```
 
 HF sources may download weights; `models pull` verifies model readiness then
-shuts down. Audio is a routing-only manifest until M4. `lh run` currently supports
-chat tasks only. Default pack completions cap at 256 tokens with thinking disabled;
+shuts down. `lh run` supports chat, transcription and speech synthesis.
+Default pack chat completions cap at 256 tokens with thinking disabled;
 edit specialist `params` for a larger budget. Explicit model selection skips d1.
+
+### Audio
+
+```sh
+lh models pull lfm3-audio
+lh run --audio recording.wav --language en
+lh run --audio recording.wav --audio-question "Summarize this recording."
+lh run --speak-out greeting.wav --language de "Guten Morgen."
+lh run "read this aloud: Hello world" # unique output WAV, path on stdout
+```
+
+The shipped audio specialist transcribes; asking a question requires the explicit
+`--audio-question` pipeline to the default text specialist. TTS speaks the prompt
+verbatim. `--voice female|male` selects the llama-tts voice; output files are never
+overwritten. Both audio specialists use the audio projector. Install `llama-tts`
+beside configured `llama_server`, or configure `plugins.llamacpp.config.llama_tts`.
+WAV works directly; other formats require ffmpeg on PATH or the backend `ffmpeg`
+setting. Short clips below 5 MiB are supported. See
+[audio lifecycle/limits](plugins/backend-llamacpp/AUDIO.md).
+
+`scripts/smoke.sh --audio --sample /path/to/jfk.wav --out /new/output/directory`
+checks English/German TTS→ASR plus an independent recording, with word-error
+scores, WAV durations, elapsed time and host load. It uses cached audio Q4_K_M
+weights and a Q8_0 projector; never downloads. [Measured results](docs/M3A-RESULTS.md).
 
 `scripts/smoke.sh` is offline-only: after `cargo build --workspace`, it uses cached
 Q4 d1/text/VL weights plus the VL F16 projector, generates a small test PNG, and

@@ -8,6 +8,19 @@ use lh_protocol::{
 };
 use std::{collections::BTreeMap, time::Instant};
 
+/// Explicit task mapping; arbitrary task names cannot become RPC methods.
+pub fn task_method(task: &str) -> Result<&'static str> {
+    match task {
+        "chat" => Ok("backend/chat"),
+        "decide" => Ok("backend/decide"),
+        "transcribe" => Ok("backend/transcribe"),
+        "speak" => Ok("backend/speak"),
+        _ => Err(Error::new(
+            -32602,
+            format!("unsupported specialist task '{task}'"),
+        )),
+    }
+}
 pub struct Engine {
     pub registry: Registry,
     pub config: Config,
@@ -16,6 +29,58 @@ pub struct Engine {
     model_calls: u64,
 }
 impl Engine {
+    /// Load without routing an artificial request (for example, models pull).
+    pub async fn prepare(&mut self, id: &str) -> Result<RouteDecision> {
+        let mut selected = decision(id, "explicit-load");
+        self.load_specialist(&mut selected).await?;
+        Ok(selected)
+    }
+    /// Dispatch to an already loaded specialist; override the key with its ID.
+    pub async fn dispatch(
+        &mut self,
+        selected: &RouteDecision,
+        mut params: json::Value,
+    ) -> Result<json::Value> {
+        let specialist = self
+            .registry
+            .specialists
+            .get(&selected.specialist)
+            .ok_or_else(|| Error::new(-32602, "unknown specialist"))?;
+        let method = task_method(&specialist.task)?;
+        let object = params
+            .as_object_mut()
+            .ok_or_else(|| Error::new(-32602, "task params must be an object"))?;
+        object.insert("key".into(), json!(specialist.id));
+        let valid = match specialist.task.as_str() {
+            "chat" => json::from_value::<lh_protocol::ChatRequest>(params.clone())
+                .map(|r| !r.messages.is_empty()),
+            "decide" => {
+                json::from_value::<DecideRequest>(params.clone()).map(|r| !r.questions.is_empty())
+            }
+            "transcribe" => json::from_value::<lh_protocol::TranscribeRequest>(params.clone())
+                .map(|r| !r.audio.trim().is_empty()),
+            "speak" => json::from_value::<lh_protocol::SpeakRequest>(params.clone())
+                .map(|r| !r.text.trim().is_empty()),
+            _ => unreachable!(),
+        }
+        .map_err(|e| Error::new(-32602, e.to_string()))?;
+        if !valid {
+            return Err(Error::new(-32602, "empty task input"));
+        }
+        let backend = selected
+            .backend
+            .as_deref()
+            .ok_or_else(|| Error::new(-32602, "specialist is not loaded"))?;
+        if !specialist
+            .choices()
+            .map_err(|e| Error::new(-32602, e))?
+            .iter()
+            .any(|c| c.backend == backend)
+        {
+            return Err(Error::new(-32602, "backend is not a specialist choice"));
+        }
+        self.host(backend)?.call(method, params).await
+    }
     pub fn new(registry: Registry, config: Config) -> Self {
         Self {
             registry,
@@ -84,6 +149,7 @@ impl Engine {
             .cloned()
             .ok_or_else(|| Error::new(-32602, "unknown specialist"))?;
         let mut errors = Vec::new();
+        task_method(&specialist.task)?;
         for choice in specialist.choices().map_err(|e| Error::new(-32602, e))? {
             let result = async {
                 let host = self

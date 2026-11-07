@@ -27,6 +27,19 @@ enum Commands {
         image: Vec<String>,
         #[arg(long)]
         router: Option<String>,
+        /// Transcribe by default, even when a prompt is supplied.
+        #[arg(long, conflicts_with = "speak_out")]
+        audio: Option<String>,
+        /// Transcribe, then ask the default text specialist the prompt.
+        #[arg(long, requires = "audio")]
+        audio_question: bool,
+        #[arg(long, conflicts_with = "image")]
+        speak_out: Option<PathBuf>,
+        #[arg(long)]
+        language: Option<String>,
+        #[arg(long)]
+        voice: Option<String>,
+        #[arg(default_value = "")]
         prompt: String,
     },
     Models {
@@ -92,9 +105,28 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             image,
             router,
             prompt,
+            audio,
+            audio_question,
+            speak_out,
+            language,
+            voice,
         } => {
             let mut engine = Engine::new(registry, config);
-            let result = inference::run(&mut engine, model, image, router.as_deref(), prompt).await;
+            let result = inference::run(
+                &mut engine,
+                model,
+                image,
+                router.as_deref(),
+                prompt,
+                inference::AudioOptions {
+                    audio,
+                    audio_question,
+                    speak_out,
+                    language,
+                    voice,
+                },
+            )
+            .await;
             engine.shutdown().await;
             result?;
         }

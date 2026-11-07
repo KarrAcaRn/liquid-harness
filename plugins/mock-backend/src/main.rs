@@ -1,3 +1,4 @@
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use lh_plugin_sdk::{Context, Handler};
 use lh_protocol::{
     Answer, DecideRequest, DecideResponse, Question, RpcError,
@@ -35,7 +36,7 @@ impl Handler for Mock {
             ctx.log("info", "mock backend initialized")
                 .map_err(|e| error(e.to_string()))?;
             return Ok(
-                json!({"name":"mock","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":self.config.get("capabilities").cloned().unwrap_or(json!(["chat","decide","stream"]))}),
+                json!({"name":"mock","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":self.config.get("capabilities").cloned().unwrap_or(json!(["chat","decide","stream","transcribe","speak"]))}),
             );
         }
         match method {
@@ -58,10 +59,45 @@ impl Handler for Mock {
             "backend/status" => Ok(
                 json!({"loaded":self.loaded.keys().map(|key| json!({"key":key,"pid":std::process::id(),"port":null,"idle_secs":0})).collect::<Vec<_>>(),"models":self.loaded,"pid":std::process::id(),"decide_calls":self.decide_calls,"config":self.config}),
             ),
-            "backend/chat" | "backend/decide" => {
+            "backend/chat" | "backend/decide" | "backend/transcribe" | "backend/speak" => {
                 let key = params["key"].as_str().ok_or_else(|| error("missing key"))?;
                 if !self.loaded.contains_key(key) {
                     return Err(RpcError::new(-32001, "model not loaded"));
+                }
+                if method == "backend/transcribe" {
+                    let request: lh_protocol::TranscribeRequest =
+                        json::from_value(params).map_err(|e| error(e.to_string()))?;
+                    if request.audio.trim().is_empty() {
+                        return Err(error("empty audio"));
+                    }
+                    return Ok(
+                        json!({"text":"Mock transcript (deterministic fixture).","language":request.language}),
+                    );
+                }
+                if method == "backend/speak" {
+                    let request: lh_protocol::SpeakRequest =
+                        json::from_value(params).map_err(|e| error(e.to_string()))?;
+                    if request.text.trim().is_empty() {
+                        return Err(error("empty text"));
+                    }
+                    // One millisecond of PCM silence, not synthesized speech.
+                    let mut wav = Vec::new();
+                    wav.extend_from_slice(b"RIFF");
+                    wav.extend_from_slice(&68_u32.to_le_bytes());
+                    wav.extend_from_slice(b"WAVEfmt ");
+                    wav.extend_from_slice(&16_u32.to_le_bytes());
+                    wav.extend_from_slice(&1_u16.to_le_bytes());
+                    wav.extend_from_slice(&1_u16.to_le_bytes());
+                    wav.extend_from_slice(&16000_u32.to_le_bytes());
+                    wav.extend_from_slice(&32000_u32.to_le_bytes());
+                    wav.extend_from_slice(&2_u16.to_le_bytes());
+                    wav.extend_from_slice(&16_u16.to_le_bytes());
+                    wav.extend_from_slice(b"data");
+                    wav.extend_from_slice(&32_u32.to_le_bytes());
+                    wav.extend_from_slice(&[0; 32]);
+                    return Ok(
+                        json!({"audio":format!("data:audio/wav;base64,{}",STANDARD.encode(wav)),"sample_rate":16000,"duration_ms":1}),
+                    );
                 }
                 if method == "backend/chat" {
                     let messages = params["messages"]

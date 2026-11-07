@@ -7,6 +7,7 @@ import shutil
 import struct
 import subprocess
 import tempfile
+import time
 import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def idle_host():
     processes = subprocess.run(['pgrep', '-ax', 'llama-server'], capture_output=True, text=True)
+    for _ in range(20):
+        if processes.returncode != 0:
+            break
+        time.sleep(0.1)  # Allow just-exited children to finish reaping; never overlap runs.
+        processes = subprocess.run(['pgrep', '-ax', 'llama-server'], capture_output=True, text=True)
     if processes.returncode == 0:
         raise RuntimeError('another llama-server is running: ' + processes.stdout.strip())
     print('loadavg:', Path('/proc/loadavg').read_text().strip(), flush=True)
@@ -39,7 +45,7 @@ def prepare(directory):
     pack = (ROOT / 'plugins/lfm3/plugin.toml').read_text()
     for repo, name in [('d1-2B', 'd1-2B-Q4_0.gguf'), ('LFM3-1.7B', 'LFM3-1.7B-Q4_K_M.gguf'), ('LFM3-VL-2B', 'LFM3-VL-2B-Q4_K_M.gguf')]:
         pack = re.sub('hf:LiquidAI/' + re.escape(repo) + '-GGUF:[A-Z0-9_]+', 'file:' + str(models[name]), pack)
-    pack = pack.replace('mmproj = "auto"', 'mmproj = ' + json.dumps(str(models['mmproj-LFM3-VL-2B-F16.gguf'])))
+    pack = re.sub(r'(source = "file:[^"]*LFM3-VL[^"]*", )mmproj = "auto"', lambda m: m[1] + 'mmproj = ' + json.dumps(str(models['mmproj-LFM3-VL-2B-F16.gguf'])), pack)
     for name, text in [('lfm3', pack), ('backend', (ROOT / 'plugins/backend-llamacpp/plugin.toml').read_text().replace('command = "lh-backend-llamacpp"', 'command = ' + json.dumps(str(backend))).replace('llama_server = "llama-server"', 'llama_server = ' + json.dumps(server)))]:
         dest = directory / 'plugins' / name
         dest.mkdir(parents=True)

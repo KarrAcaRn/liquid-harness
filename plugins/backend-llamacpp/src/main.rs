@@ -1,6 +1,7 @@
 //! Blocking llama.cpp adapter. The state mutex is held throughout a request:
 //! the TTL worker can never evict a model during loading or inference.
 use lh_plugin_sdk::{Context, Handler};
+mod audio;
 use lh_protocol::{
     ModelSpec, RpcError,
     json::{self, Value, json},
@@ -37,7 +38,7 @@ impl Drop for Process {
     }
 }
 struct Resident {
-    process: Process,
+    process: Option<Process>,
     model: ModelSpec,
     port: u16,
     pinned: bool,
@@ -51,7 +52,10 @@ struct State {
 impl State {
     fn reap(&mut self) {
         self.models.retain(|_, r| {
-            let alive = matches!(r.process.0.try_wait(), Ok(None));
+            let alive = r
+                .process
+                .as_mut()
+                .is_none_or(|p| matches!(p.0.try_wait(), Ok(None)));
             alive && (r.pinned || r.used.elapsed() < self.ttl)
         });
     }
@@ -73,6 +77,9 @@ struct Backend {
     state: Arc<(Mutex<State>, Condvar)>,
     worker: Option<thread::JoinHandle<()>>,
     executable: String,
+    tts_executable: Option<String>,
+    ffmpeg: String,
+    request_timeout: Duration,
     models_dir: Option<String>,
     limit: usize,
     load_timeout: Duration,
@@ -108,6 +115,9 @@ impl Default for Backend {
             state,
             worker: Some(worker),
             executable: "llama-server".into(),
+            tts_executable: None,
+            ffmpeg: "ffmpeg".into(),
+            request_timeout: Duration::from_secs(600),
             models_dir: None,
             limit: 2,
             load_timeout: Duration::from_secs(600),
@@ -301,6 +311,8 @@ impl Handler for Backend {
             for key in map.keys() {
                 if ![
                     "llama_server",
+                    "llama_tts",
+                    "ffmpeg",
                     "models_dir",
                     "max_resident",
                     "idle_ttl_secs",
@@ -315,7 +327,7 @@ impl Handler for Backend {
                     return Err(invalid(format!("unknown config: {key}")));
                 }
             }
-            for key in ["llama_server", "models_dir"] {
+            for key in ["llama_server", "llama_tts", "ffmpeg", "models_dir"] {
                 if let Some(v) = config.get(key)
                     && v.as_str().is_none_or(str::is_empty)
                 {
@@ -330,13 +342,19 @@ impl Handler for Backend {
             self.load_timeout = Duration::from_secs(positive(&config, "load_timeout_secs", 600)?);
             state.ttl = Duration::from_secs(positive(&config, "idle_ttl_secs", 600)?);
             self.agent = agent(positive(&config, "request_timeout_secs", 600)?);
+            self.request_timeout =
+                Duration::from_secs(positive(&config, "request_timeout_secs", 600)?);
+            self.tts_executable = config["llama_tts"].as_str().map(expand);
+            if let Some(v) = config["ffmpeg"].as_str() {
+                self.ffmpeg = expand(v);
+            }
             if let Some(v) = config["llama_server"].as_str() {
                 self.executable = expand(v);
             }
             self.models_dir = config["models_dir"].as_str().map(str::to_owned);
             self.initialized = true;
             return Ok(
-                json!({"name":"llamacpp","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":["chat","decide","stream"]}),
+                json!({"name":"llamacpp","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":["chat","decide","stream","transcribe","speak"]}),
             );
         }
         if !self.initialized {
@@ -345,7 +363,7 @@ impl Handler for Backend {
         state.reap();
         if method == "backend/status" {
             return Ok(
-                json!({"loaded":state.models.iter().map(|(key,r)| json!({"key":key,"pid":r.process.0.id(),"port":r.port,"idle_secs":r.used.elapsed().as_secs(),"pinned":r.pinned})).collect::<Vec<_>>()}),
+                json!({"loaded":state.models.iter().map(|(key,r)| json!({"key":key,"pid":r.process.as_ref().map(|p|p.0.id()),"port":r.process.as_ref().map(|_|r.port),"idle_secs":r.used.elapsed().as_secs(),"pinned":r.pinned})).collect::<Vec<_>>()}),
             );
         }
         if ![
@@ -353,6 +371,8 @@ impl Handler for Backend {
             "backend/unload",
             "backend/chat",
             "backend/decide",
+            "backend/transcribe",
+            "backend/speak",
         ]
         .contains(&method)
         {
@@ -387,10 +407,20 @@ impl Handler for Backend {
                         "key already loaded with a different model; unload first",
                     ));
                 }
+                if pinned && r.process.is_none() {
+                    drop(listener);
+                    let mut process = spawn(&self.executable, &args, self.models_dir.as_deref())?;
+                    ready(&mut process, port, self.load_timeout, || {
+                        ctx.progress("Reloading suspended model for pinning", None)
+                            .map_err(internal)
+                    })?;
+                    r.port = port;
+                    r.process = Some(process);
+                }
                 r.pinned |= pinned;
                 r.used = Instant::now();
                 return Ok(
-                    json!({"key":key,"ready":true,"info":{"pid":r.process.0.id(),"port":r.port}}),
+                    json!({"key":key,"ready":true,"info":{"pid":r.process.as_ref().map(|p|p.0.id()),"port":r.process.as_ref().map(|_|r.port)}}),
                 );
             }
             state.room(self.limit)?;
@@ -405,7 +435,7 @@ impl Handler for Backend {
             state.models.insert(
                 key.into(),
                 Resident {
-                    process,
+                    process: Some(process),
                     model,
                     port,
                     pinned,
@@ -414,12 +444,26 @@ impl Handler for Backend {
             );
             return Ok(json!({"key":key,"ready":true,"info":{"pid":pid,"port":port}}));
         }
+        if method == "backend/speak" {
+            return audio::speak(self, &mut state, &params);
+        }
         let resident = state
             .models
             .get_mut(key)
             .ok_or_else(|| failed("model not loaded"))?;
+        if resident.process.is_none() {
+            let listener = TcpListener::bind("127.0.0.1:0").map_err(failed)?;
+            resident.port = listener.local_addr().map_err(failed)?.port();
+            let args = arguments(&resident.model, resident.port)?;
+            drop(listener);
+            let mut process = spawn(&self.executable, &args, self.models_dir.as_deref())?;
+            ready(&mut process, resident.port, self.load_timeout, || Ok(()))?;
+            resident.process = Some(process);
+        }
         let base = format!("http://127.0.0.1:{}", resident.port);
-        let result = if method == "backend/decide" {
+        let result = if method == "backend/transcribe" {
+            audio::transcribe(self, &base, &params)
+        } else if method == "backend/decide" {
             let _: lh_protocol::DecideRequest =
                 json::from_value(params.clone()).map_err(invalid)?;
             let mut body = params.clone();

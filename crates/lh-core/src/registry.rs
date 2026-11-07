@@ -79,6 +79,7 @@ impl Registry {
                 }
             }
             for specialist in &manifest.specialist {
+                crate::router::task_method(&specialist.task)?;
                 if specialist.requires.iter().any(|m| {
                     !["text", "image", "audio"].contains(&m.as_str())
                         || !specialist.inputs.contains(m)

@@ -1,0 +1,60 @@
+[
+  {
+    "operation": "tts-en",
+    "seconds": 13.174,
+    "load_before": "2.93 2.27 2.09 2/2130 1995534",
+    "load_after": "4.00 2.54 2.18 1/2130 1995807",
+    "stdout": "/opt/data/home/projects/liquid-harness/.worktrees/t_1c65ad95/target/m3a-final/en.wav",
+    "returncode": 0,
+    "wav": "/opt/data/home/projects/liquid-harness/.worktrees/t_1c65ad95/target/m3a-final/en.wav",
+    "sample_rate": 24000,
+    "duration_ms": 3200
+  },
+  {
+    "operation": "asr-en",
+    "seconds": 5.232,
+    "load_before": "4.00 2.54 2.18 1/2130 1995810",
+    "load_after": "3.75 2.51 2.17 3/2096 1995876",
+    "stdout": "Hello world. This is a short test.",
+    "returncode": 0,
+    "reference": "Hello world. This is a short test.",
+    "word_errors": 0,
+    "reference_words": 7,
+    "wer": 0.0
+  },
+  {
+    "operation": "tts-de",
+    "seconds": 13.941,
+    "load_before": "3.75 2.51 2.17 2/2096 1995879",
+    "load_after": "3.77 2.57 2.20 3/2097 1996289",
+    "stdout": "/opt/data/home/projects/liquid-harness/.worktrees/t_1c65ad95/target/m3a-final/de.wav",
+    "returncode": 0,
+    "wav": "/opt/data/home/projects/liquid-harness/.worktrees/t_1c65ad95/target/m3a-final/de.wav",
+    "sample_rate": 24000,
+    "duration_ms": 3040
+  },
+  {
+    "operation": "asr-de",
+    "seconds": 5.568,
+    "load_before": "3.77 2.57 2.20 1/2097 1996292",
+    "load_after": "4.11 2.66 2.23 3/2095 1996371",
+    "stdout": "Guten Morgen. Das ist ein kurzer Test.",
+    "returncode": 0,
+    "reference": "Guten Morgen. Das ist ein kurzer Test.",
+    "word_errors": 0,
+    "reference_words": 7,
+    "wer": 0.0
+  },
+  {
+    "operation": "asr-sample",
+    "seconds": 10.505,
+    "load_before": "4.11 2.66 2.23 2/2095 1996376",
+    "load_after": "4.94 2.89 2.31 3/2100 1996442",
+    "stdout": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+    "returncode": 0,
+    "reference": "And so my fellow Americans ask not what your country can do for you ask what you can do for your country",
+    "word_errors": 0,
+    "reference_words": 22,
+    "wer": 0.0
+  }
+]

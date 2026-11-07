@@ -1,7 +1,7 @@
 use super::*;
 use std::io::{BufRead, BufReader, Read, Write};
 
-fn fake_http(response: String) -> (String, thread::JoinHandle<Value>) {
+pub(super) fn fake_http(response: String) -> (String, thread::JoinHandle<Value>) {
     fake_http_at(response, "/v1/chat/completions")
 }
 fn fake_http_at(response: String, path: &'static str) -> (String, thread::JoinHandle<Value>) {
@@ -175,16 +175,16 @@ fn child() -> Process {
     }
     Process(command.spawn().unwrap())
 }
-fn resident(pinned: bool, age: u64) -> Resident {
+pub(super) fn resident(pinned: bool, age: u64) -> Resident {
     Resident {
-        process: child(),
+        process: Some(child()),
         model: spec("file:/fake"),
         port: 1,
         pinned,
         used: Instant::now() - Duration::from_secs(age),
     }
 }
-fn dead(pid: u32) -> bool {
+pub(super) fn dead(pid: u32) -> bool {
     unsafe {
         libc::kill(pid as i32, 0) == -1
             && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
@@ -200,7 +200,7 @@ fn lru_pins_and_process_reaping() {
     state.models.insert("pinned".into(), resident(true, 30));
     state.models.insert("old".into(), resident(false, 20));
     state.models.insert("recent".into(), resident(false, 1));
-    let pid = state.models["old"].process.0.id();
+    let pid = state.models["old"].process.as_ref().unwrap().0.id();
     state.room(3).unwrap();
     assert!(dead(pid));
     assert!(state.models.contains_key("pinned"));
@@ -217,8 +217,8 @@ fn background_ttl_and_drop_cleanup() {
         state.models.insert("expired".into(), resident(false, 1));
         state.models.insert("pinned".into(), resident(true, 1));
         (
-            state.models["expired"].process.0.id(),
-            state.models["pinned"].process.0.id(),
+            state.models["expired"].process.as_ref().unwrap().0.id(),
+            state.models["pinned"].process.as_ref().unwrap().0.id(),
         )
     };
     let start = Instant::now();
@@ -295,7 +295,7 @@ fn decide_proxy_and_explicit_unload() {
     let backend = Backend::default();
     let mut r = resident(true, 0);
     r.port = url.rsplit(':').next().unwrap().parse().unwrap();
-    let pid = r.process.0.id();
+    let pid = r.process.as_ref().unwrap().0.id();
     backend
         .state
         .0

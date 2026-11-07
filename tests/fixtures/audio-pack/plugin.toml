@@ -1,0 +1,24 @@
+[plugin]
+id = "audio-pack"
+version = "0.1.0"
+provides = ["specialist"]
+
+[[specialist]]
+id = "mock-transcribe"
+route = "Transcribe audio"
+task = "transcribe"
+inputs = ["text", "audio"]
+requires = ["audio"]
+outputs = ["text"]
+backend = "mock"
+model = { source = "file:mock-audio" }
+
+[[specialist]]
+id = "mock-speak"
+route = "Read aloud"
+task = "speak"
+inputs = ["text"]
+outputs = ["audio"]
+hints = [{ pattern = "vorlesen", weight = 1.0 }, { pattern = "lies das vor", weight = 1.0 }, { pattern = "read this aloud", weight = 1.0 }]
+backend = "mock"
+model = { source = "file:mock-audio" }

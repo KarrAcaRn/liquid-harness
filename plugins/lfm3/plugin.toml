@@ -36,7 +36,7 @@ inputs = ["text", "audio"]
 requires = ["audio"]
 outputs = ["text", "audio"]
 backend = "llamacpp"
-model = { source = "hf:LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M", ctx = 4096, threads = 8 }
+model = { source = "hf:LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M", mmproj = "auto", ctx = 4096, threads = 8 }
 
 [[specialist]]
 id = "lfm3-speak"
@@ -44,9 +44,9 @@ route = "Generate spoken audio from text, read words aloud, text to speech, say 
 task = "speak"
 inputs = ["text"]
 outputs = ["audio"]
-hints = [{ pattern = "read this aloud", weight = 1.0 }, { pattern = "please read aloud", weight = 1.0 }, { pattern = "bitte vorlesen", weight = 1.0 }]
+hints = [{ pattern = "read this aloud", weight = 1.0 }, { pattern = "please read aloud", weight = 1.0 }, { pattern = "bitte vorlesen", weight = 1.0 }, { pattern = "vorlesen", weight = 1.0 }, { pattern = "lies das vor", weight = 1.0 }]
 backend = "llamacpp"
-model = { source = "hf:LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M", ctx = 4096, threads = 8 }
+model = { source = "hf:LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M", mmproj = "auto", ctx = 4096, threads = 8 }
 
 [router]
 id = "d1"

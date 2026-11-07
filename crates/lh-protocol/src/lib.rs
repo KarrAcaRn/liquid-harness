@@ -9,6 +9,37 @@ pub mod chat;
 mod sse;
 pub use chat::*;
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TranscribeRequest {
+    pub key: String,
+    /// Local path or audio data URL.
+    pub audio: String,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TranscribeResponse {
+    pub text: String,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpeakRequest {
+    pub key: String,
+    pub text: String,
+    #[serde(default)]
+    pub voice: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SpeakResponse {
+    /// WAV data URL or local path; never raw samples.
+    pub audio: String,
+    pub sample_rate: u32,
+    pub duration_ms: u64,
+}
+
 pub const PROTOCOL_VERSION: u32 = 1;
 fn protocol_version() -> u32 {
     PROTOCOL_VERSION
@@ -327,6 +358,45 @@ mod tests {
         assert_eq!(manifest.router.as_ref().unwrap().min_confidence, 0.55);
         let encoded = toml::to_string(&manifest).unwrap();
         assert_eq!(toml::from_str::<Manifest>(&encoded).unwrap(), manifest);
+    }
+    #[test]
+    fn audio_wire_types_round_trip_and_optional_fields_default() {
+        let transcribe: TranscribeRequest =
+            json::from_value(json::json!({"key":"asr","audio":"recording.wav"})).unwrap();
+        assert_eq!(transcribe.language, None);
+        let speak: SpeakRequest =
+            json::from_value(json::json!({"key":"tts","text":"Hello"})).unwrap();
+        assert_eq!(speak.voice, None);
+        assert_eq!(speak.language, None);
+        assert_eq!(
+            json::from_value::<SpeakRequest>(json::to_value(&speak).unwrap()).unwrap(),
+            speak
+        );
+        assert_eq!(
+            json::from_value::<TranscribeRequest>(json::to_value(&transcribe).unwrap()).unwrap(),
+            transcribe
+        );
+        let response = SpeakResponse {
+            audio: "data:audio/wav;base64,AA==".into(),
+            sample_rate: 16000,
+            duration_ms: 1,
+        };
+        assert_eq!(
+            json::from_value::<SpeakResponse>(json::to_value(&response).unwrap()).unwrap(),
+            response
+        );
+        let response = TranscribeResponse {
+            text: "Hello".into(),
+            language: Some("en".into()),
+        };
+        assert_eq!(
+            json::from_value::<TranscribeResponse>(json::to_value(&response).unwrap()).unwrap(),
+            response
+        );
+        assert!(json::from_value::<SpeakRequest>(json::json!({"key":"tts"})).is_err());
+        assert!(
+            json::from_value::<TranscribeRequest>(json::json!({"key":"asr","audio":1})).is_err()
+        );
     }
     #[test]
     fn all_manifest_structs_reject_unknown_keys() {
