@@ -1,6 +1,7 @@
 # liquid-harness – Architecture
 
-Status: M1 implemented (offline routing core). Later milestone sections remain the design contract.
+Status: M2 implemented (llama.cpp backend, streaming one-shot CLI, routing evaluation).
+Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
 ## 1. Goals
@@ -65,7 +66,7 @@ description = "Runs GGUF models via llama.cpp llama-server"
 provides = ["backend"]          # backend | router | tool
 
 [run]                           # only for process plugins
-command = "lh-backend-llamacpp" # resolved relative to plugin dir, then $PATH
+command = "lh-backend-llamacpp" # plugin dir, running lh executable's dir, then $PATH
 args = []
 
 [config]                        # passed verbatim in `initialize`; user config may override
@@ -110,8 +111,8 @@ model = { source = "hf:LiquidAI/LFM3-VL-2B-GGUF:Q4_K_M", mmproj = "auto" }
 id = "d1"
 strategy = "decision-model"         # decision-model | plugin | rules
 backend = "llamacpp"
-model = { source = "hf:LiquidAI/d1-2B-GGUF:Q8_0", batch = 8192 }
-inputs = ["text", "image"]
+model = { source = "hf:LiquidAI/d1-2B-GGUF:Q4_0", ctx = 4096, batch = 512, threads = 8 }
+inputs = ["text"]
 min_confidence = 0.55
 ```
 
@@ -147,7 +148,10 @@ Streaming results are sent as notifications before the final response.
 
 M1 transport details:
 - Frames are bounded to 8 MiB including the newline. Invalid envelopes, unknown
-  response IDs, EOF, or a 30-second call/handshake timeout fail that process generation.
+  response IDs, EOF, or a call/handshake timeout fail that process generation.
+  The default is 30 seconds. Reserved `config.host_timeout_secs` overrides it
+  (manifest or user override) and is removed before plugin initialization.
+  The llama.cpp manifest uses 660 seconds, longer than its 600-second load/HTTP limits.
   In-flight requests fail together and are never replayed. The initial start is free;
   at most three restart attempts are allowed in a rolling 60-second window.
 - The host correlates concurrent calls, accepts out-of-order responses, and exposes
@@ -173,6 +177,38 @@ M1 transport details:
 - Tool plugins are plain **MCP servers** (stdio). We do not invent a tool protocol.
 
 ## 5. Routing (the core)
+
+### M2 backend lifecycle
+
+The Linux backend uses `ureq` only for loopback HTTP (TLS features disabled);
+llama.cpp owns Hugging Face downloads and honors `LLAMA_CACHE`. `models_dir`,
+when set, overrides that cache variable. `file:` paths and explicit projector
+paths expand `~/`. `mmproj = "auto"` enables HF discovery; absent `mmproj`
+adds `--no-mmproj` to avoid downloading an unused projector for text routing.
+
+ModelSpec ctx/batch/threads override backend config values (4096/512/8 by
+default). The backend serializes inference and a 250 ms TTL worker with one
+mutex, so active models cannot be evicted. Load is idempotent for the same key
+and effective ModelSpec; reuse with a different specification is rejected.
+Pinned models survive TTL/LRU but explicit unload and shutdown still remove them.
+If all slots are pinned, load fails with -32002. Periodic load progress is sent
+as `$/progress`; no download percentage is invented.
+
+Every server has its own process group. RAII cleanup kills the group and reaps
+the child, including health failures. Linux parent-death SIGKILL closes the
+plugin-crash/host-timeout path for the direct llama-server. Arbitrary descendants
+of third-party wrapper executables are not guaranteed cleanup after SIGKILL;
+configure the actual llama-server binary, not a daemonizing wrapper. Port
+selection releases an ephemeral listener before spawning; an intervening bind
+race is possible and becomes a load failure. Cancellation remains serial SDK
+behavior. SSE requires `[DONE]` and a finish reason, aggregates text/tool deltas
+and usage, and bounds total input to 8 MiB.
+
+The LFM3 pack enables text-only d1 routing: image/audio attachments select their
+sole compatible specialist without loading d1 or a router projector. Audio is
+manifest/routing-only; `lh run` rejects non-chat specialist tasks until M4.
+LFM3 chat disables thinking by default to avoid an invisible reasoning-only
+answer exhausting the short completion budget (256 tokens, overridable in pack).
 
 Routing is the central feature and is built first.
 
@@ -232,7 +268,7 @@ crates/lh-plugin-sdk  Write Rust plugins in ~30 lines: blocking stdio loop, meth
                       dispatch, stream/log helpers. std + lh-protocol only.
 crates/lh-core        Plugin discovery + host (tokio process/io), registry, router
                       engine, orchestrator, config. No HTTP.
-crates/lh-cli         Binary `lh`. M1 exposes plugins list and route only. HTTP server
+crates/lh-cli         Binary `lh`. M2 adds run, models pull and eval routing. HTTP server
                       and its feature flags are deferred to M3.
 plugins/backend-llamacpp  Binary `lh-backend-llamacpp`: spawns/stops llama-server per
                       model on a free localhost port, health-waits, LRU/TTL unload,
@@ -297,10 +333,35 @@ User `[plugins.<id>.config]` settings shallowly override manifest `[config]` key
   plugin host (no models needed). `cargo test --workspace` must pass offline.
 - `scripts/smoke.sh`: real end-to-end run on CPU with d1-2B + LFM3-1.7B (Q4), a few minutes max.
   Skips cleanly with a message if `llama-server` or the models are missing.
+  Python 3 prepares isolated file-source manifests and a deterministic red-square PNG.
+  Also runs LFM3-VL and checks nonempty streamed answers. It never downloads;
+  `LLAMA_CACHE`, `LLAMA_SERVER`, and `LH_BIN` override discovery. Each CLI process
+  finishes before the next starts, including router-only then explicit text generation.
 - `evals/routing.jsonl` + `lh eval routing`: labelled prompts → expected specialist; reports
   accuracy, confusion matrix, p50/p95 router latency. Measure alone (check `/proc/loadavg`).
 
 ## 11. Milestones
+
+### M2 CPU investigation (2026-11-07, under 30 minutes)
+
+On this Core Ultra 7 155H, b12189 selected `libggml-cpu-alderlake.so`, not a
+generic CPU fallback. Short CPU-only `llama-bench -p 128 -n 0 -r 2` runs used
+d1-2B Q4_0 with repacking on, no concurrent model process, at most eight threads.
+Unpinned `-b 512 -t 4,6,8` yielded 80.041530 / 92.117897 / 100.476442 tok/s
+(load average before 5.09/2.83/1.97, after 5.67/3.07/2.06; residual load from
+the preceding sequential eval). Six physical P-cores, mask `54b` = logical CPUs
+0,1,3,6,8,10 with `--cpu-strict 1`, yielded 129.312994 / 114.895230 / 111.322138
+tok/s for batches 128/512/8192 (load before 3.23/2.77/2.00, after 3.74/2.89/2.05).
+Topology was checked with `lscpu -e=CPU,CORE,MAXMHZ`; IDs are host-specific.
+
+The old ~48 tok/s was not reproduced; these data do not establish its cause.
+Hybrid-core placement and clock/power state are plausible contributors, not
+proven diagnoses. Batch 8192 does not help a 128-token input. Two repetitions
+are exploratory, not a sustained thermal benchmark. Keep portable defaults at
+eight threads and batch 512, ctx 4096; on this host experiment with six physical
+P-cores (e.g. launching lh under `taskset -c 0,1,3,6,8,10` and setting model
+threads to six). Do not hardcode this affinity on other CPUs. Detailed routing
+accuracy, smoke output, limitations and raw measurements: [M2-RESULTS.md](M2-RESULTS.md).
 
 - **M1 – Routing core:** protocol, SDK, plugin host, mock backend, `rules` and `decision-model` routers,
   `lh plugins list`, `lh route`. Offline tests green.

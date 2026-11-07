@@ -13,7 +13,7 @@ use std::{
 
 fn registry() -> Registry {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let mut r = Registry::from_paths(&[root.into()]).unwrap();
+    let mut r = Registry::from_paths(&[root.join("mock-backend"), root.join("mock-pack")]).unwrap();
     r.plugins
         .get_mut("mock")
         .unwrap()

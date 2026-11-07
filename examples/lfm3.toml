@@ -1,0 +1,7 @@
+router = "d1"
+default_specialist = "lfm3-text"
+plugin_path = ["../plugins/backend-llamacpp", "../plugins/lfm3"]
+
+[plugins.llamacpp.config]
+llama_server = "llama-server"
+threads = 8

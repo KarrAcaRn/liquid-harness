@@ -1,0 +1,43 @@
+[plugin]
+id = "lfm3"
+version = "0.1.0"
+protocol = 1
+description = "Liquid AI LFM3 specialists and d1 router"
+provides = ["specialist", "router"]
+
+[[specialist]]
+id = "lfm3-text"
+route = "General text conversation, questions, writing, reasoning, coding, planning and tool tasks. Also explaining images or audio in general when no media analysis is requested."
+task = "chat"
+inputs = ["text"]
+outputs = ["text", "tool_calls"]
+backend = "llamacpp"
+model = { source = "hf:LiquidAI/LFM3-1.7B-GGUF:Q4_K_M", ctx = 4096, threads = 8 }
+params = { temperature = 0.3, top_p = 0.9, max_tokens = 256, chat_template_kwargs = { enable_thinking = false } }
+
+[[specialist]]
+id = "lfm3-vl"
+route = "Analyze an attached picture, screenshot, photograph, chart or scanned document. Read visible text or describe what is in an image. Not general text questions about photography."
+task = "chat"
+inputs = ["text", "image"]
+outputs = ["text"]
+backend = "llamacpp"
+model = { source = "hf:LiquidAI/LFM3-VL-2B-GGUF:Q4_K_M", mmproj = "auto", ctx = 4096, threads = 8 }
+params = { temperature = 0.1, max_tokens = 256, chat_template_kwargs = { enable_thinking = false } }
+
+[[specialist]]
+id = "lfm3-audio"
+route = "Listen to audio, transcribe speech, voicemail or voice messages into text (Sprachaufnahme, Mailboxnachricht, Sprache in Text umwandeln), or generate spoken audio. Not writing text scripts, explaining sound or discussing music in text."
+task = "transcribe"
+inputs = ["text", "audio"]
+outputs = ["text", "audio"]
+backend = "llamacpp"
+model = { source = "hf:LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M", ctx = 4096, threads = 8 }
+
+[router]
+id = "d1"
+strategy = "decision-model"
+backend = "llamacpp"
+model = { source = "hf:LiquidAI/d1-2B-GGUF:Q4_0", ctx = 4096, batch = 512, threads = 8 }
+inputs = ["text"]
+min_confidence = 0.55

@@ -12,3 +12,6 @@ lh-core.workspace = true
 lh-protocol.workspace = true
 tokio.workspace = true
 clap.workspace = true
+serde.workspace = true
+# CLI-only encoding of local image attachments for OpenAI-compatible requests.
+base64 = "0.22"

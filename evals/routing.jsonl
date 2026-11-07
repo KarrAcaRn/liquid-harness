@@ -1,0 +1,42 @@
+{"language":"en","prompt":"Write a Python function that sorts a list of integers.","expected":"lfm3-text"}
+{"language":"de","prompt":"Schreibe eine Python-Funktion, die eine Liste von Zahlen sortiert.","expected":"lfm3-text"}
+{"language":"en","prompt":"Explain the difference between a mutex and a semaphore.","expected":"lfm3-text"}
+{"language":"de","prompt":"Erkläre den Unterschied zwischen einem Mutex und einem Semaphor.","expected":"lfm3-text"}
+{"language":"en","prompt":"Draft a polite email declining a meeting invitation.","expected":"lfm3-text"}
+{"language":"de","prompt":"Formuliere eine höfliche E-Mail, um eine Besprechung abzusagen.","expected":"lfm3-text"}
+{"language":"en","prompt":"Plan a three-day walking holiday in Berlin.","expected":"lfm3-text"}
+{"language":"de","prompt":"Plane einen dreitägigen Wanderurlaub im Schwarzwald.","expected":"lfm3-text"}
+{"language":"en","prompt":"Translate this sentence into French: The train leaves tomorrow.","expected":"lfm3-text"}
+{"language":"de","prompt":"Übersetze diesen Satz ins Englische: Der Zug fährt morgen ab.","expected":"lfm3-text"}
+{"language":"en","prompt":"Explain how photosynthesis works to a child.","expected":"lfm3-text"}
+{"language":"de","prompt":"Erkläre einem Kind, wie die Photosynthese funktioniert.","expected":"lfm3-text"}
+{"language":"en","prompt":"Read the error message visible in my screenshot.","expected":"lfm3-vl"}
+{"language":"de","prompt":"Lies die Fehlermeldung auf meinem Bildschirmfoto.","expected":"lfm3-vl"}
+{"language":"en","prompt":"Describe the objects in this photograph and their positions.","expected":"lfm3-vl"}
+{"language":"de","prompt":"Beschreibe die Gegenstände auf diesem Foto und ihre Positionen.","expected":"lfm3-vl"}
+{"language":"en","prompt":"Extract the invoice number from the scanned document.","expected":"lfm3-vl"}
+{"language":"de","prompt":"Lies die Rechnungsnummer aus dem eingescannten Dokument ab.","expected":"lfm3-vl"}
+{"language":"en","prompt":"Which bar is tallest in the chart shown in the image?","expected":"lfm3-vl"}
+{"language":"de","prompt":"Welcher Balken ist im abgebildeten Diagramm am höchsten?","expected":"lfm3-vl"}
+{"language":"en","prompt":"Locate the submit button in the application screenshot.","expected":"lfm3-vl"}
+{"language":"de","prompt":"Finde die Schaltfläche zum Absenden auf dem Bildschirmfoto.","expected":"lfm3-vl"}
+{"language":"en","prompt":"Describe the attached image.","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII="],"expected":"lfm3-vl"}
+{"language":"de","prompt":"Beschreibe das angehängte Bild.","images":["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZ1sAAAAASUVORK5CYII="],"expected":"lfm3-vl"}
+{"language":"en","prompt":"Transcribe the spoken words in my voice recording.","expected":"lfm3-audio"}
+{"language":"de","prompt":"Transkribiere die gesprochenen Wörter in meiner Sprachaufnahme.","expected":"lfm3-audio"}
+{"language":"en","prompt":"Read this sentence aloud with natural speech: Welcome home.","expected":"lfm3-audio"}
+{"language":"de","prompt":"Lies diesen Satz mit natürlicher Stimme vor: Willkommen zu Hause.","expected":"lfm3-audio"}
+{"language":"en","prompt":"Turn this text into a spoken audio message.","expected":"lfm3-audio"}
+{"language":"de","prompt":"Wandle diesen Text in eine gesprochene Audionachricht um.","expected":"lfm3-audio"}
+{"language":"en","prompt":"Listen to the recording and identify the background sounds.","expected":"lfm3-audio"}
+{"language":"de","prompt":"Höre dir die Aufnahme an und identifiziere die Hintergrundgeräusche.","expected":"lfm3-audio"}
+{"language":"en","prompt":"Convert the speech in this voicemail into text.","expected":"lfm3-audio"}
+{"language":"de","prompt":"Wandle die Sprache in dieser Mailboxnachricht in Text um.","expected":"lfm3-audio"}
+{"language":"en","prompt":"Hello, answer this question with the explicitly selected text specialist.","specialist":"lfm3-text","expected":"lfm3-text"}
+{"language":"de","prompt":"Hallo, beantworte diese Frage mit dem ausdrücklich ausgewählten Textspezialisten.","specialist":"lfm3-text","expected":"lfm3-text"}
+{"language":"en","prompt":"Write a script for a podcast, but do not generate audio.","expected":"lfm3-text"}
+{"language":"de","prompt":"Erkläre, wie eine Kamera funktioniert, ohne ein Foto zu analysieren.","expected":"lfm3-text"}
+{"language":"en","prompt":"What does this say?","images":["fixture.png"],"expected":"lfm3-vl"}
+{"language":"de","prompt":"Was wird hier gesagt?","audio":["fixture.wav"],"expected":"lfm3-audio"}
+{"language":"en","prompt":"Transcribe this recording.","audio":["fixture.wav"],"expected":"lfm3-audio"}
+{"language":"de","prompt":"Schreibe einen Liedtext über einen blauen Himmel, keine Audiodatei.","expected":"lfm3-text"}

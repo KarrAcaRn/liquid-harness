@@ -30,7 +30,13 @@ pub struct Host {
 }
 impl Host {
     pub fn new(entry: Entry, config: BTreeMap<String, Value>) -> Self {
-        Self::with_timeout(entry, config, Duration::from_secs(30))
+        let timeout = config
+            .get("host_timeout_secs")
+            .or_else(|| entry.manifest.config.get("host_timeout_secs"))
+            .and_then(Value::as_u64)
+            .filter(|n| *n > 0)
+            .unwrap_or(30);
+        Self::with_timeout(entry, config, Duration::from_secs(timeout))
     }
     pub fn with_timeout(entry: Entry, config: BTreeMap<String, Value>, timeout: Duration) -> Self {
         let (tx, rx) = mpsc::channel(64);
@@ -101,18 +107,28 @@ async fn spawn(entry: &Entry, config: &BTreeMap<String, Value>) -> Result<Proces
         .as_ref()
         .ok_or_else(|| Error::new(-32602, "declarative plugin cannot be spawned"))?;
     let local = entry.path.parent().unwrap().join(&run.command);
+    let sibling = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|dir| dir.join(&run.command)));
     let executable = if local.is_file() {
-        local
+        local.clone()
+    } else if let Some(path) = sibling.as_ref().filter(|p| p.is_file()) {
+        path.clone()
     } else {
         run.command.clone().into()
     };
-    let mut child = Command::new(executable)
+    let mut child = Command::new(&executable)
         .args(&run.args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true)
-        .spawn()?;
+        .spawn().map_err(|error| Error::new(-32603, format!(
+            "plugin '{}' could not spawn command '{}': {error}; selected '{}'; searched plugin path '{}', executable sibling '{}', PATH={:?}",
+            entry.manifest.plugin.id, run.command, executable.display(), local.display(),
+            sibling.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "<current executable unavailable>".into()),
+            std::env::var_os("PATH").unwrap_or_default()
+        )))?;
     let mut child_stdin = child.stdin.take().unwrap();
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -177,6 +193,8 @@ async fn spawn(entry: &Entry, config: &BTreeMap<String, Value>) -> Result<Proces
     };
     let mut merged = entry.manifest.config.clone();
     merged.extend(config.clone());
+    // Reserved host setting, not part of the plugin-owned configuration.
+    merged.remove("host_timeout_secs");
     if let Err(e) = process.send(json::to_value(Request::new(0, "initialize", json!({"protocol":1,"plugin_id":entry.manifest.plugin.id,"config":merged,"core_version":env!("CARGO_PKG_VERSION")})))?) {
         process.stop().await;
         return Err(e);

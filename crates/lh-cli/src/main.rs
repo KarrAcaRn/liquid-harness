@@ -1,3 +1,6 @@
+mod inference;
+mod routing_eval;
+
 use clap::{Parser, Subcommand};
 use lh_core::{Config, Engine, Registry};
 use lh_protocol::{
@@ -16,6 +19,24 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Commands {
+    /// Route a one-shot request and stream the specialist's answer.
+    Run {
+        #[arg(long, default_value = "auto")]
+        model: String,
+        #[arg(long)]
+        image: Vec<String>,
+        #[arg(long)]
+        router: Option<String>,
+        prompt: String,
+    },
+    Models {
+        #[command(subcommand)]
+        command: Models,
+    },
+    Eval {
+        #[command(subcommand)]
+        command: Eval,
+    },
     Plugins {
         #[command(subcommand)]
         command: Plugins,
@@ -36,6 +57,21 @@ enum Commands {
 enum Plugins {
     List,
 }
+#[derive(Subcommand)]
+enum Models {
+    /// Download and load a specialist or router model, then shut down.
+    Pull { id: String },
+}
+#[derive(Subcommand)]
+enum Eval {
+    /// Evaluate labelled JSONL routing cases without running specialists.
+    Routing {
+        #[arg(long, default_value = "evals/routing.jsonl")]
+        file: PathBuf,
+        #[arg(long)]
+        router: Option<String>,
+    },
+}
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     if let Err(e) = run().await {
@@ -48,6 +84,37 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (config, directory) = Config::load(cli.config.as_deref())?;
     let registry = Registry::discover(&config, &directory)?;
     match cli.command {
+        Commands::Run {
+            model,
+            image,
+            router,
+            prompt,
+        } => {
+            let mut engine = Engine::new(registry, config);
+            let result = inference::run(&mut engine, model, image, router.as_deref(), prompt).await;
+            engine.shutdown().await;
+            result?;
+        }
+        Commands::Models {
+            command: Models::Pull { id },
+        } => {
+            let mut engine = Engine::new(registry, config);
+            let result = inference::pull(&mut engine, &id).await;
+            engine.shutdown().await;
+            println!("{}", json::to_string_pretty(&result?)?);
+        }
+        Commands::Eval {
+            command: Eval::Routing { file, router },
+        } => {
+            let mut engine = Engine::new(registry, config);
+            let result = routing_eval::evaluate(&mut engine, &file, router.as_deref()).await;
+            engine.shutdown().await;
+            let report = result?;
+            println!("{}", json::to_string_pretty(&report)?);
+            if report["error_count"].as_u64().unwrap_or(0) != 0 {
+                return Err("routing evaluation encountered errors (see JSON report)".into());
+            }
+        }
         Commands::Plugins {
             command: Plugins::List,
         } => {

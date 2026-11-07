@@ -1,0 +1,12 @@
+[package]
+name = "lh-backend-llamacpp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lh-protocol.workspace = true
+lh-plugin-sdk.workspace = true
+ureq = { version = "2", default-features = false, features = ["json"] }
+libc = "0.2"

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/lh-protocol", "crates/lh-plugin-sdk", "crates/lh-core", "crates/lh-cli", "plugins/mock-backend"]
+members = ["crates/lh-protocol", "crates/lh-plugin-sdk", "crates/lh-core", "crates/lh-cli", "plugins/mock-backend", "plugins/backend-llamacpp"]
 resolver = "3"
 
 [workspace.package]

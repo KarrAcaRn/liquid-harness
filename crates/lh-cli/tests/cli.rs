@@ -23,7 +23,23 @@ impl Fixture {
             .env("XDG_CONFIG_HOME", &self.0)
             .env(
                 "LH_PLUGIN_PATH",
-                Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins"),
+                std::env::join_paths(["mock-backend", "mock-pack"].map(|name| {
+                    Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../plugins")
+                        .join(name)
+                }))
+                .unwrap(),
+            )
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    Path::new(env!("CARGO_BIN_EXE_lh"))
+                        .parent()
+                        .unwrap()
+                        .display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
             );
         c
     }
@@ -41,6 +57,103 @@ fn output(mut c: Command, args: &[&str]) -> Value {
 fn failed(o: Output, expected: &str) {
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains(expected));
+}
+#[test]
+fn run_streams_unicode_and_local_image_and_pull_loads_both_kinds() {
+    let f = Fixture::new();
+    let image = f.0.join("image.PNG");
+    std::fs::write(&image, b"\x89PNG\r\n\x1a\n").unwrap();
+    for args in [
+        vec!["run", "--model", "mock-text", "Grüße 🌍"],
+        vec!["run", "--image", image.to_str().unwrap(), "Grüße 🌍"],
+        vec!["run", "--router", "mock-router", "coding Grüße 🌍"],
+    ] {
+        let o = f.command().args(&args).output().unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+        assert_eq!(
+            String::from_utf8(o.stdout).unwrap(),
+            format!("{}\n", args.last().unwrap())
+        );
+    }
+    for (id, key) in [
+        ("mock-text", "mock-text"),
+        ("mock-router", "router:mock-router"),
+    ] {
+        let result = output(f.command(), &["models", "pull", id]);
+        assert_eq!(result["ready"], true);
+        assert_eq!(result["key"], key);
+    }
+    failed(
+        f.command()
+            .args(["models", "pull", "missing"])
+            .output()
+            .unwrap(),
+        "unknown specialist or router",
+    );
+    failed(
+        f.command()
+            .args([
+                "run",
+                "--model",
+                "mock-text",
+                "--image",
+                image.to_str().unwrap(),
+                "hello",
+            ])
+            .output()
+            .unwrap(),
+        "-32003",
+    );
+    failed(
+        f.command()
+            .args(["run", "--image", "missing.png", "hello"])
+            .output()
+            .unwrap(),
+        "missing.png",
+    );
+}
+#[test]
+fn eval_reports_separate_latencies_accuracy_and_errors() {
+    let f = Fixture::new();
+    let cases = f.0.join("cases.jsonl");
+    std::fs::write(
+        &cases,
+        concat!(
+            "{\"prompt\":\"coding programming\",\"expected\":\"mock-text\"}\n",
+            "{\"prompt\":\"picture\",\"images\":[\"fixture.png\"],\"expected\":\"mock-vision\"}\n",
+            "{\"prompt\":\"hello\",\"specialist\":\"mock-text\",\"expected\":\"mock-audio\"}\n"
+        ),
+    )
+    .unwrap();
+    let args = [
+        "eval",
+        "routing",
+        "--file",
+        cases.to_str().unwrap(),
+        "--router",
+        "mock-router",
+    ];
+    let report = output(f.command(), &args);
+    assert_eq!(report["total"], 3);
+    assert_eq!(report["correct"], 2);
+    assert_eq!(report["error_count"], 0);
+    assert_eq!(report["latency"]["decision_model"]["count"], 1);
+    assert_eq!(report["latency"]["fastpaths"]["count"], 2);
+    assert_eq!(report["confusion_matrix"]["mock-audio"]["mock-text"], 1);
+    assert!(report["loadavg"]["before"].is_string());
+    std::fs::write(&cases, "not json\n{\"prompt\":\"hello\",\"expected\":\"missing\"}\n{\"prompt\":\"hello\",\"expected\":\"mock-text\",\"specialist\":\"missing\"}\n").unwrap();
+    let o = f.command().args(args).output().unwrap();
+    assert!(!o.status.success());
+    let report: Value = json::from_slice(&o.stdout).unwrap();
+    assert_eq!(report["total"], 3);
+    assert_eq!(report["error_count"], 3);
+    assert_eq!(report["accuracy"], 0.0);
+    assert!(report["latency"]["decision_model"]["p50_ms"].is_null());
+    std::fs::write(&cases, "\n").unwrap();
+    failed(
+        f.command().args(args).output().unwrap(),
+        "contains no cases",
+    );
 }
 #[test]
 fn plugins_list_and_all_route_flags() {
@@ -109,4 +222,47 @@ fn config_cli_precedes_environment_and_config_dir_discovery() {
         output(c, &["plugins", "list"])["plugins"][0]["id"],
         "local-pack"
     );
+}
+
+#[test]
+fn plugin_resolution_uses_sibling_without_path_and_reports_search_locations() {
+    let f = Fixture::new();
+    let mut command = f.command();
+    command.env("PATH", "");
+    assert_eq!(
+        output(
+            command,
+            &["route", "--router", "mock-router", "coding programming"]
+        )["specialist"],
+        "mock-text"
+    );
+
+    let pack = f.0.join("plugins/mock-backend");
+    std::fs::create_dir_all(&pack).unwrap();
+    let source =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/mock-backend/plugin.toml");
+    let manifest = std::fs::read_to_string(source)
+        .unwrap()
+        .replace("lh-mock-backend", "nonexistent-lh-plugin");
+    std::fs::write(pack.join("plugin.toml"), manifest).unwrap();
+    let mut command = f.command();
+    command.env("PATH", "").env(
+        "LH_PLUGIN_PATH",
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/mock-pack"),
+    );
+    let result = command
+        .args(["route", "--router", "mock-router", "coding"])
+        .output()
+        .unwrap();
+    assert!(!result.status.success());
+    let error = String::from_utf8(result.stderr).unwrap();
+    for expected in [
+        "plugin 'mock'",
+        "nonexistent-lh-plugin",
+        "searched plugin path",
+        "executable sibling",
+        "PATH=",
+    ] {
+        assert!(error.contains(expected), "{error}");
+    }
 }

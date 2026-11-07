@@ -1,0 +1,1088 @@
+{
+  "eval": {
+    "accuracy": 1.0,
+    "confusion_matrix": {
+      "lfm3-audio": {
+        "lfm3-audio": 12
+      },
+      "lfm3-text": {
+        "lfm3-text": 17
+      },
+      "lfm3-vl": {
+        "lfm3-vl": 13
+      }
+    },
+    "confusion_matrix_axes": {
+      "columns": "predicted",
+      "rows": "expected"
+    },
+    "correct": 42,
+    "error_count": 0,
+    "errors": [],
+    "file": "evals/routing.jsonl",
+    "latency": {
+      "decision_model": {
+        "count": 35,
+        "p50_ms": 1840,
+        "p95_ms": 2039
+      },
+      "fastpaths": {
+        "count": 7,
+        "p50_ms": 0,
+        "p95_ms": 0
+      },
+      "note": "Nearest-rank percentiles of router_ms; decision-model includes load/startup, low-confidence fallback included. Fastpaths are reported separately and core reports them as zero."
+    },
+    "loadavg": {
+      "after": "4.60 3.29 2.27 1/2056 1852637",
+      "before": "2.95 2.77 2.04 3/2034 1852408"
+    },
+    "results": [
+      {
+        "decision": {
+          "confidence": 0.9957330040740444,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 2587,
+          "scores": {
+            "lfm3-audio": 0.0012037212780078943,
+            "lfm3-text": 0.9957330040740444,
+            "lfm3-vl": 0.0030632746479475814
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 1
+      },
+      {
+        "decision": {
+          "confidence": 0.9957608084609963,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1310,
+          "scores": {
+            "lfm3-audio": 0.001265877801215886,
+            "lfm3-text": 0.9957608084609963,
+            "lfm3-vl": 0.0029733137377877944
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 2
+      },
+      {
+        "decision": {
+          "confidence": 0.9923444456533034,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1249,
+          "scores": {
+            "lfm3-audio": 0.0018983758602050232,
+            "lfm3-text": 0.9923444456533034,
+            "lfm3-vl": 0.005757178486491465
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 3
+      },
+      {
+        "decision": {
+          "confidence": 0.9892099609098628,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1308,
+          "scores": {
+            "lfm3-audio": 0.002709052702176655,
+            "lfm3-text": 0.9892099609098628,
+            "lfm3-vl": 0.008080986387960476
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 4
+      },
+      {
+        "decision": {
+          "confidence": 0.9853624435336966,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1356,
+          "scores": {
+            "lfm3-audio": 0.011388035616522976,
+            "lfm3-text": 0.9853624435336966,
+            "lfm3-vl": 0.003249520849780472
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 5
+      },
+      {
+        "decision": {
+          "confidence": 0.9874034957577776,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1457,
+          "scores": {
+            "lfm3-audio": 0.009441346163289526,
+            "lfm3-text": 0.9874034957577776,
+            "lfm3-vl": 0.003155158078933082
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 6
+      },
+      {
+        "decision": {
+          "confidence": 0.9942016829036714,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1387,
+          "scores": {
+            "lfm3-audio": 0.0019803851681353644,
+            "lfm3-text": 0.9942016829036714,
+            "lfm3-vl": 0.0038179319281932697
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 7
+      },
+      {
+        "decision": {
+          "confidence": 0.989650161399422,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1462,
+          "scores": {
+            "lfm3-audio": 0.003107631316441462,
+            "lfm3-text": 0.989650161399422,
+            "lfm3-vl": 0.007242207284136516
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 8
+      },
+      {
+        "decision": {
+          "confidence": 0.979281947569742,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1517,
+          "scores": {
+            "lfm3-audio": 0.008729765098369728,
+            "lfm3-text": 0.979281947569742,
+            "lfm3-vl": 0.011988287331888238
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 9
+      },
+      {
+        "decision": {
+          "confidence": 0.9608980585737504,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1644,
+          "scores": {
+            "lfm3-audio": 0.023256124889982088,
+            "lfm3-text": 0.9608980585737504,
+            "lfm3-vl": 0.015845816536267487
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 10
+      },
+      {
+        "decision": {
+          "confidence": 0.970474412598004,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1473,
+          "scores": {
+            "lfm3-audio": 0.026338033610533173,
+            "lfm3-text": 0.970474412598004,
+            "lfm3-vl": 0.003187553791462908
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 11
+      },
+      {
+        "decision": {
+          "confidence": 0.9450531132324516,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1600,
+          "scores": {
+            "lfm3-audio": 0.04342776258998482,
+            "lfm3-text": 0.9450531132324516,
+            "lfm3-vl": 0.011519124177563437
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 12
+      },
+      {
+        "decision": {
+          "confidence": 0.9760486692785346,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1640,
+          "scores": {
+            "lfm3-audio": 0.0018705553427684392,
+            "lfm3-text": 0.022080775378696856,
+            "lfm3-vl": 0.9760486692785346
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "en",
+        "line": 13
+      },
+      {
+        "decision": {
+          "confidence": 0.968657803028791,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1687,
+          "scores": {
+            "lfm3-audio": 0.002208083616167906,
+            "lfm3-text": 0.029134113355041135,
+            "lfm3-vl": 0.968657803028791
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "de",
+        "line": 14
+      },
+      {
+        "decision": {
+          "confidence": 0.9504664891026336,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1665,
+          "scores": {
+            "lfm3-audio": 0.0020575519603375993,
+            "lfm3-text": 0.0474759589370288,
+            "lfm3-vl": 0.9504664891026336
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "en",
+        "line": 15
+      },
+      {
+        "decision": {
+          "confidence": 0.9579175791272748,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1690,
+          "scores": {
+            "lfm3-audio": 0.0021220657378988148,
+            "lfm3-text": 0.0399603551348263,
+            "lfm3-vl": 0.9579175791272748
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "de",
+        "line": 16
+      },
+      {
+        "decision": {
+          "confidence": 0.9579395495687748,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1796,
+          "scores": {
+            "lfm3-audio": 0.002497148918419655,
+            "lfm3-text": 0.03956330151280555,
+            "lfm3-vl": 0.9579395495687748
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "en",
+        "line": 17
+      },
+      {
+        "decision": {
+          "confidence": 0.9641648940142206,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1839,
+          "scores": {
+            "lfm3-audio": 0.002404302178561303,
+            "lfm3-text": 0.0334308038072182,
+            "lfm3-vl": 0.9641648940142206
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "de",
+        "line": 18
+      },
+      {
+        "decision": {
+          "confidence": 0.882978312058546,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1885,
+          "scores": {
+            "lfm3-audio": 0.003401546508547092,
+            "lfm3-text": 0.11362014143290684,
+            "lfm3-vl": 0.882978312058546
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "en",
+        "line": 19
+      },
+      {
+        "decision": {
+          "confidence": 0.864183036884424,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1931,
+          "scores": {
+            "lfm3-audio": 0.003962899758976964,
+            "lfm3-text": 0.13185406335659902,
+            "lfm3-vl": 0.864183036884424
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "de",
+        "line": 20
+      },
+      {
+        "decision": {
+          "confidence": 0.756784140443346,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1869,
+          "scores": {
+            "lfm3-audio": 0.006635427663583636,
+            "lfm3-text": 0.23658043189307035,
+            "lfm3-vl": 0.756784140443346
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "en",
+        "line": 21
+      },
+      {
+        "decision": {
+          "confidence": 0.9383759618675922,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1906,
+          "scores": {
+            "lfm3-audio": 0.0025415440341488077,
+            "lfm3-text": 0.05908249409825896,
+            "lfm3-vl": 0.9383759618675922
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "de",
+        "line": 22
+      },
+      {
+        "decision": {
+          "confidence": 1.0,
+          "extras": {},
+          "reason": "single-candidate",
+          "router_ms": 0,
+          "scores": {
+            "lfm3-vl": 1.0
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "en",
+        "line": 23
+      },
+      {
+        "decision": {
+          "confidence": 1.0,
+          "extras": {},
+          "reason": "single-candidate",
+          "router_ms": 0,
+          "scores": {
+            "lfm3-vl": 1.0
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "de",
+        "line": 24
+      },
+      {
+        "decision": {
+          "confidence": 0.9936724140166778,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1897,
+          "scores": {
+            "lfm3-audio": 0.9936724140166778,
+            "lfm3-text": 0.004300165988677394,
+            "lfm3-vl": 0.002027419994644787
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "en",
+        "line": 25
+      },
+      {
+        "decision": {
+          "confidence": 0.9899739408711652,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 2016,
+          "scores": {
+            "lfm3-audio": 0.9899739408711652,
+            "lfm3-text": 0.0069863532045502524,
+            "lfm3-vl": 0.0030397059242845137
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "de",
+        "line": 26
+      },
+      {
+        "decision": {
+          "confidence": 0.9846738672533852,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1904,
+          "scores": {
+            "lfm3-audio": 0.9846738672533852,
+            "lfm3-text": 0.012774239135461406,
+            "lfm3-vl": 0.0025518936111534607
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "en",
+        "line": 27
+      },
+      {
+        "decision": {
+          "confidence": 0.9736050635266462,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 2036,
+          "scores": {
+            "lfm3-audio": 0.9736050635266462,
+            "lfm3-text": 0.019847424955984794,
+            "lfm3-vl": 0.006547511517368842
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "de",
+        "line": 28
+      },
+      {
+        "decision": {
+          "confidence": 0.975895094805586,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1840,
+          "scores": {
+            "lfm3-audio": 0.975895094805586,
+            "lfm3-text": 0.02106241438991664,
+            "lfm3-vl": 0.003042490804497513
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "en",
+        "line": 29
+      },
+      {
+        "decision": {
+          "confidence": 0.9705264794231226,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1849,
+          "scores": {
+            "lfm3-audio": 0.9705264794231226,
+            "lfm3-text": 0.02593556530470506,
+            "lfm3-vl": 0.003537955272172368
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "de",
+        "line": 30
+      },
+      {
+        "decision": {
+          "confidence": 0.961800866504736,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1987,
+          "scores": {
+            "lfm3-audio": 0.961800866504736,
+            "lfm3-text": 0.02167421165167966,
+            "lfm3-vl": 0.016524921843584384
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "en",
+        "line": 31
+      },
+      {
+        "decision": {
+          "confidence": 0.9607064947034356,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1958,
+          "scores": {
+            "lfm3-audio": 0.9607064947034356,
+            "lfm3-text": 0.018887784931245617,
+            "lfm3-vl": 0.020405720365318767
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "de",
+        "line": 32
+      },
+      {
+        "decision": {
+          "confidence": 0.9907609527352548,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1922,
+          "scores": {
+            "lfm3-audio": 0.9907609527352548,
+            "lfm3-text": 0.0058096999527545564,
+            "lfm3-vl": 0.0034293473119904327
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "en",
+        "line": 33
+      },
+      {
+        "decision": {
+          "confidence": 0.9590965124271716,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 2003,
+          "scores": {
+            "lfm3-audio": 0.9590965124271716,
+            "lfm3-text": 0.032579707208420655,
+            "lfm3-vl": 0.008323780364407875
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "de",
+        "line": 34
+      },
+      {
+        "decision": {
+          "confidence": 1.0,
+          "extras": {},
+          "reason": "explicit",
+          "router_ms": 0,
+          "scores": {
+            "lfm3-text": 1.0
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 35
+      },
+      {
+        "decision": {
+          "confidence": 1.0,
+          "extras": {},
+          "reason": "explicit",
+          "router_ms": 0,
+          "scores": {
+            "lfm3-text": 1.0
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 36
+      },
+      {
+        "decision": {
+          "confidence": 0.8772585293486491,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 1952,
+          "scores": {
+            "lfm3-audio": 0.119668424604684,
+            "lfm3-text": 0.8772585293486491,
+            "lfm3-vl": 0.0030730460466667996
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "en",
+        "line": 37
+      },
+      {
+        "decision": {
+          "confidence": 0.9546228958016518,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 2007,
+          "scores": {
+            "lfm3-audio": 0.00364491658395361,
+            "lfm3-text": 0.9546228958016518,
+            "lfm3-vl": 0.04173218761439468
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 38
+      },
+      {
+        "decision": {
+          "confidence": 1.0,
+          "extras": {},
+          "reason": "single-candidate",
+          "router_ms": 0,
+          "scores": {
+            "lfm3-vl": 1.0
+          },
+          "specialist": "lfm3-vl"
+        },
+        "expected": "lfm3-vl",
+        "language": "en",
+        "line": 39
+      },
+      {
+        "decision": {
+          "confidence": 1.0,
+          "extras": {},
+          "reason": "single-candidate",
+          "router_ms": 0,
+          "scores": {
+            "lfm3-audio": 1.0
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "de",
+        "line": 40
+      },
+      {
+        "decision": {
+          "confidence": 1.0,
+          "extras": {},
+          "reason": "single-candidate",
+          "router_ms": 0,
+          "scores": {
+            "lfm3-audio": 1.0
+          },
+          "specialist": "lfm3-audio"
+        },
+        "expected": "lfm3-audio",
+        "language": "en",
+        "line": 41
+      },
+      {
+        "decision": {
+          "confidence": 0.946720352698164,
+          "extras": {},
+          "reason": "decision-model",
+          "router_ms": 2039,
+          "scores": {
+            "lfm3-audio": 0.05002553672071356,
+            "lfm3-text": 0.946720352698164,
+            "lfm3-vl": 0.003254110581122391
+          },
+          "specialist": "lfm3-text"
+        },
+        "expected": "lfm3-text",
+        "language": "de",
+        "line": 42
+      }
+    ],
+    "router": "d1",
+    "total": 42
+  },
+  "bench_unpinned": {
+    "load_before": [
+      5.09,
+      2.83,
+      1.97
+    ],
+    "load_after": [
+      5.67,
+      3.07,
+      2.06
+    ],
+    "results": [
+      {
+        "build_commit": "80d2c0c2c",
+        "build_number": 12189,
+        "cpu_info": "Intel(R) Core(TM) Ultra 7 155H",
+        "gpu_info": "",
+        "backends": "CPU",
+        "model_filename": "/opt/data/models/llama-cache/models--LiquidAI--d1-2B-GGUF/snapshots/4a181094d1b6addfaa3a0956f78e7ab2aa406a0c/d1-2B-Q4_0.gguf",
+        "model_type": "lfm3 1.7B Q4_0",
+        "model_size": 1041368320,
+        "model_n_params": 1728801600,
+        "n_batch": 512,
+        "n_ubatch": 512,
+        "n_threads": 4,
+        "cpu_mask": "0x0",
+        "cpu_strict": false,
+        "poll": 50,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": -1,
+        "n_cpu_moe": 0,
+        "split_mode": "layer",
+        "main_gpu": 0,
+        "no_kv_offload": false,
+        "flash_attn": -1,
+        "devices": "auto",
+        "tensor_split": "0.00",
+        "tensor_buft_overrides": "none",
+        "load_mode": "auto",
+        "lazy_mode": "auto",
+        "embeddings": false,
+        "no_op_offload": 0,
+        "no_host": false,
+        "repack": true,
+        "fit_target": 0,
+        "fit_min_ctx": 0,
+        "n_prompt": 128,
+        "n_gen": 0,
+        "n_depth": 0,
+        "test_time": "2026-11-07T17:43:18Z",
+        "avg_ns": 1599197732,
+        "stddev_ns": 9447437,
+        "avg_ts": 80.04153,
+        "stddev_ts": 0.472854,
+        "samples_ns": [
+          1592517385,
+          1605878079
+        ],
+        "samples_ts": [
+          80.3759,
+          79.7072
+        ]
+      },
+      {
+        "build_commit": "80d2c0c2c",
+        "build_number": 12189,
+        "cpu_info": "Intel(R) Core(TM) Ultra 7 155H",
+        "gpu_info": "",
+        "backends": "CPU",
+        "model_filename": "/opt/data/models/llama-cache/models--LiquidAI--d1-2B-GGUF/snapshots/4a181094d1b6addfaa3a0956f78e7ab2aa406a0c/d1-2B-Q4_0.gguf",
+        "model_type": "lfm3 1.7B Q4_0",
+        "model_size": 1041368320,
+        "model_n_params": 1728801600,
+        "n_batch": 512,
+        "n_ubatch": 512,
+        "n_threads": 6,
+        "cpu_mask": "0x0",
+        "cpu_strict": false,
+        "poll": 50,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": -1,
+        "n_cpu_moe": 0,
+        "split_mode": "layer",
+        "main_gpu": 0,
+        "no_kv_offload": false,
+        "flash_attn": -1,
+        "devices": "auto",
+        "tensor_split": "0.00",
+        "tensor_buft_overrides": "none",
+        "load_mode": "auto",
+        "lazy_mode": "auto",
+        "embeddings": false,
+        "no_op_offload": 0,
+        "no_host": false,
+        "repack": true,
+        "fit_target": 0,
+        "fit_min_ctx": 0,
+        "n_prompt": 128,
+        "n_gen": 0,
+        "n_depth": 0,
+        "test_time": "2026-11-07T17:43:23Z",
+        "avg_ns": 1391219781,
+        "stddev_ns": 68697058,
+        "avg_ts": 92.117897,
+        "stddev_ts": 4.548689,
+        "samples_ns": [
+          1342643640,
+          1439795923
+        ],
+        "samples_ts": [
+          95.3343,
+          88.9015
+        ]
+      },
+      {
+        "build_commit": "80d2c0c2c",
+        "build_number": 12189,
+        "cpu_info": "Intel(R) Core(TM) Ultra 7 155H",
+        "gpu_info": "",
+        "backends": "CPU",
+        "model_filename": "/opt/data/models/llama-cache/models--LiquidAI--d1-2B-GGUF/snapshots/4a181094d1b6addfaa3a0956f78e7ab2aa406a0c/d1-2B-Q4_0.gguf",
+        "model_type": "lfm3 1.7B Q4_0",
+        "model_size": 1041368320,
+        "model_n_params": 1728801600,
+        "n_batch": 512,
+        "n_ubatch": 512,
+        "n_threads": 8,
+        "cpu_mask": "0x0",
+        "cpu_strict": false,
+        "poll": 50,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": -1,
+        "n_cpu_moe": 0,
+        "split_mode": "layer",
+        "main_gpu": 0,
+        "no_kv_offload": false,
+        "flash_attn": -1,
+        "devices": "auto",
+        "tensor_split": "0.00",
+        "tensor_buft_overrides": "none",
+        "load_mode": "auto",
+        "lazy_mode": "auto",
+        "embeddings": false,
+        "no_op_offload": 0,
+        "no_host": false,
+        "repack": true,
+        "fit_target": 0,
+        "fit_min_ctx": 0,
+        "n_prompt": 128,
+        "n_gen": 0,
+        "n_depth": 0,
+        "test_time": "2026-11-07T17:43:27Z",
+        "avg_ns": 1274063440,
+        "stddev_ns": 18407439,
+        "avg_ts": 100.476442,
+        "stddev_ts": 1.451666,
+        "samples_ns": [
+          1261047415,
+          1287079465
+        ],
+        "samples_ts": [
+          101.503,
+          99.45
+        ]
+      }
+    ]
+  },
+  "bench_physical_pcores": {
+    "load_before": [
+      3.23,
+      2.77,
+      2.0
+    ],
+    "load_after": [
+      3.74,
+      2.89,
+      2.05
+    ],
+    "results": [
+      {
+        "build_commit": "80d2c0c2c",
+        "build_number": 12189,
+        "cpu_info": "Intel(R) Core(TM) Ultra 7 155H",
+        "gpu_info": "",
+        "backends": "CPU",
+        "model_filename": "/opt/data/models/llama-cache/models--LiquidAI--d1-2B-GGUF/snapshots/4a181094d1b6addfaa3a0956f78e7ab2aa406a0c/d1-2B-Q4_0.gguf",
+        "model_type": "lfm3 1.7B Q4_0",
+        "model_size": 1041368320,
+        "model_n_params": 1728801600,
+        "n_batch": 128,
+        "n_ubatch": 512,
+        "n_threads": 6,
+        "cpu_mask": "54b",
+        "cpu_strict": true,
+        "poll": 50,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": -1,
+        "n_cpu_moe": 0,
+        "split_mode": "layer",
+        "main_gpu": 0,
+        "no_kv_offload": false,
+        "flash_attn": -1,
+        "devices": "auto",
+        "tensor_split": "0.00",
+        "tensor_buft_overrides": "none",
+        "load_mode": "auto",
+        "lazy_mode": "auto",
+        "embeddings": false,
+        "no_op_offload": 0,
+        "no_host": false,
+        "repack": true,
+        "fit_target": 0,
+        "fit_min_ctx": 0,
+        "n_prompt": 128,
+        "n_gen": 0,
+        "n_depth": 0,
+        "test_time": "2026-11-07T17:44:15Z",
+        "avg_ns": 989971886,
+        "stddev_ns": 15763404,
+        "avg_ts": 129.312994,
+        "stddev_ts": 2.059062,
+        "samples_ns": [
+          978825476,
+          1001118296
+        ],
+        "samples_ts": [
+          130.769,
+          127.857
+        ]
+      },
+      {
+        "build_commit": "80d2c0c2c",
+        "build_number": 12189,
+        "cpu_info": "Intel(R) Core(TM) Ultra 7 155H",
+        "gpu_info": "",
+        "backends": "CPU",
+        "model_filename": "/opt/data/models/llama-cache/models--LiquidAI--d1-2B-GGUF/snapshots/4a181094d1b6addfaa3a0956f78e7ab2aa406a0c/d1-2B-Q4_0.gguf",
+        "model_type": "lfm3 1.7B Q4_0",
+        "model_size": 1041368320,
+        "model_n_params": 1728801600,
+        "n_batch": 512,
+        "n_ubatch": 512,
+        "n_threads": 6,
+        "cpu_mask": "54b",
+        "cpu_strict": true,
+        "poll": 50,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": -1,
+        "n_cpu_moe": 0,
+        "split_mode": "layer",
+        "main_gpu": 0,
+        "no_kv_offload": false,
+        "flash_attn": -1,
+        "devices": "auto",
+        "tensor_split": "0.00",
+        "tensor_buft_overrides": "none",
+        "load_mode": "auto",
+        "lazy_mode": "auto",
+        "embeddings": false,
+        "no_op_offload": 0,
+        "no_host": false,
+        "repack": true,
+        "fit_target": 0,
+        "fit_min_ctx": 0,
+        "n_prompt": 128,
+        "n_gen": 0,
+        "n_depth": 0,
+        "test_time": "2026-11-07T17:44:18Z",
+        "avg_ns": 1116055140,
+        "stddev_ns": 66759806,
+        "avg_ts": 114.89523,
+        "stddev_ts": 6.872764,
+        "samples_ns": [
+          1068848828,
+          1163261452
+        ],
+        "samples_ts": [
+          119.755,
+          110.035
+        ]
+      },
+      {
+        "build_commit": "80d2c0c2c",
+        "build_number": 12189,
+        "cpu_info": "Intel(R) Core(TM) Ultra 7 155H",
+        "gpu_info": "",
+        "backends": "CPU",
+        "model_filename": "/opt/data/models/llama-cache/models--LiquidAI--d1-2B-GGUF/snapshots/4a181094d1b6addfaa3a0956f78e7ab2aa406a0c/d1-2B-Q4_0.gguf",
+        "model_type": "lfm3 1.7B Q4_0",
+        "model_size": 1041368320,
+        "model_n_params": 1728801600,
+        "n_batch": 8192,
+        "n_ubatch": 512,
+        "n_threads": 6,
+        "cpu_mask": "54b",
+        "cpu_strict": true,
+        "poll": 50,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": -1,
+        "n_cpu_moe": 0,
+        "split_mode": "layer",
+        "main_gpu": 0,
+        "no_kv_offload": false,
+        "flash_attn": -1,
+        "devices": "auto",
+        "tensor_split": "0.00",
+        "tensor_buft_overrides": "none",
+        "load_mode": "auto",
+        "lazy_mode": "auto",
+        "embeddings": false,
+        "no_op_offload": 0,
+        "no_host": false,
+        "repack": true,
+        "fit_target": 0,
+        "fit_min_ctx": 0,
+        "n_prompt": 128,
+        "n_gen": 0,
+        "n_depth": 0,
+        "test_time": "2026-11-07T17:44:21Z",
+        "avg_ns": 1149899115,
+        "stddev_ns": 13806961,
+        "avg_ts": 111.322138,
+        "stddev_ts": 1.336649,
+        "samples_ns": [
+          1140136178,
+          1159662053
+        ],
+        "samples_ts": [
+          112.267,
+          110.377
+        ]
+      }
+    ]
+  },
+  "smoke": "loadavg: 3.20 3.07 2.23 1/2015 1852816\n{\"specialist\":\"lfm3-text\",\"confidence\":0.5253878710038052,\"scores\":{\"lfm3-audio\":0.5253878710038052,\"lfm3-text\":0.4691819581978554,\"lfm3-vl\":0.005430170798339158},\"reason\":\"low-confidence\",\"extras\":{},\"router_ms\":2464}\nHello! How can I help you today?\nThe colored shape is a square that is red in color.\nloadavg: 3.33 3.10 2.25 2/2017 1852947\nPASS: d1 routing, streamed text and image answers; servers shut down.\n",
+  "hf_pull": "loadavg: 3.20 3.07 2.23 2/2014 1852769\n{\n  \"info\": {\n    \"pid\": 1852773,\n    \"port\": 45227\n  },\n  \"key\": \"router:d1\",\n  \"ready\": true\n}\nloadavg: 3.20 3.07 2.23 1/2015 1852813\n",
+  "offline_tests_passed": 54
+}

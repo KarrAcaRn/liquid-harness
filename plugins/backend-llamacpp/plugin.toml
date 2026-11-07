@@ -1,0 +1,21 @@
+[plugin]
+id = "llamacpp"
+version = "0.1.0"
+protocol = 1
+description = "Runs GGUF models via llama.cpp llama-server"
+provides = ["backend"]
+
+[run]
+command = "lh-backend-llamacpp"
+args = []
+
+[config]
+llama_server = "llama-server"
+max_resident = 2
+idle_ttl_secs = 600
+load_timeout_secs = 600
+request_timeout_secs = 600
+host_timeout_secs = 660
+threads = 8
+ctx = 4096
+batch = 512

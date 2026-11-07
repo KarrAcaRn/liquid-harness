@@ -35,6 +35,17 @@ impl Context<'_> {
             .map_err(io::Error::other)?,
         )
     }
+    /// Report request-scoped progress; omit the fraction when it is unknown.
+    pub fn progress(&mut self, message: &str, fraction: Option<f64>) -> io::Result<()> {
+        let mut params = json::json!({"id": self.id, "message": message});
+        if let Some(fraction) = fraction {
+            params["fraction"] = json::json!(fraction);
+        }
+        write_value(
+            self.output,
+            json::to_value(Notification::new("$/progress", params)).map_err(io::Error::other)?,
+        )
+    }
     pub fn log(&mut self, level: &str, message: &str) -> io::Result<()> {
         write_value(
             self.output,
