@@ -1,0 +1,4 @@
+/target/
+.worktrees/
+*.gguf
+/models/
