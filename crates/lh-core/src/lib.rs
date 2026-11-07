@@ -1,4 +1,7 @@
 //! Lightweight plugin hosting and routing; no inference or HTTP dependencies.
+pub mod cascade;
+pub use cascade::Session;
+pub use config::CascadeConfig;
 pub mod config;
 pub mod host;
 pub mod registry;

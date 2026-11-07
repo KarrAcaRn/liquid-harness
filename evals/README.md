@@ -1,47 +1,59 @@
 # Routing evaluation
 
-`lh eval routing --file evals/routing.jsonl --router d1` routes labelled cases
-without generating specialist answers. Select your configuration with `--config`.
-The bundled corpus has 42 cases (21 English, 21 German), using the specialist IDs
-`lfm3-text`, `lfm3-vl`, and `lfm3-audio`. Use an isolated LFM3 plugin pack (without
-mock specialists) for meaningful model measurements; otherwise mock specialists
-also become candidates. The default CLI configuration deliberately remains offline
-rules/mock, so configure the LFM3 default specialist and router explicitly.
+Run each set twice, with the same LFM3 configuration:
 
-Each JSONL object requires `prompt` and `expected`. Optional fields are `language`,
-`images` (string references), `audio` (string references), and `specialist` (explicit
-selection). Unknown fields are rejected. Most cases test semantic intent routing
-without attachments, including requests describing future image/audio work. Two
-image cases use a tiny embedded PNG; additional image/audio reference cases test
-modality routing and deliberately ambiguous prompts. Two explicit cases
-exercise the explicit-selection shortcut. This is a routing corpus, not a test of
-image understanding or audio inference. No specialist models are loaded by eval.
+```sh
+lh --config examples/lfm3.toml eval routing --file evals/routing-tuning.jsonl --baseline
+lh --config examples/lfm3.toml eval routing --file evals/routing-tuning.jsonl
+lh --config examples/lfm3.toml eval routing --file evals/routing-heldout.jsonl --baseline
+lh --config examples/lfm3.toml eval routing --file evals/routing-heldout.jsonl
+```
 
-The JSON report includes accuracy over **all nonblank cases** (errors count as
-incorrect), a sparse expected-row/predicted-column confusion matrix, per-case
-results, line-numbered errors, and `/proc/loadavg` before/after. Malformed rows and
-unknown labels have no valid matrix row but remain in the total and error list.
-A nonzero error count causes exit status 1 after printing the report; incorrect
-predictions alone do not. Empty datasets fail.
+`--baseline` disables optional cascade shortcuts, including requirements and the
+single-candidate shortcut. Explicit selection and input-modality safety remain.
+Default discovery now excludes mock specialists; fixtures require an explicit
+`LH_PLUGIN_PATH`. Default routing remains offline `rules`; real evaluation must
+configure `d1`, as above. No specialist inference is performed.
 
-Latency uses nearest-rank p50/p95 of the core's `router_ms`. Decision-model and
-low-confidence fallback decisions share one bucket; fastpaths have a separate
-bucket (core reports their latency as zero). Empty buckets report null, not zero.
-Decision-model latency includes startup/load and routing overhead; it is not a
-pure warmed inference measurement. Run alone and inspect load averages before
-interpreting latency. See `docs/M2-RESULTS.md` for the measured development-set run.
+## Corpora and freezing
 
-## Other M2 commands
+- `routing.jsonl`: original M2 tuning corpus, retained unchanged for provenance.
+- `routing-tuning.jsonl`: the same 42 prompts, with missing image/audio references
+  filled for media-analysis cases and four TTS labels changed to `lfm3-speak`.
+  These are necessary schema/contract migrations, not new prompts or post-result
+  label tuning. Both baseline and cascade use this identical migrated corpus.
+- `routing-heldout.jsonl`: 40 independent cases, 20 EN and 20 DE, authored by a
+  separate worker without reading the hint lists, specialist pack or tuning
+  prompts. Includes eight two-turn sessions and ambiguous intent. Frozen before
+  the production hints were written; no post-evaluation edits or hint tuning.
+  SHA-256: `d12f70a5fbaf7841d06f335733bbc861da3c493872871b9cc7cf1cec4565dfd2`.
 
-- `lh run --model auto "prompt"` routes, loads, and streams an answer. Explicit IDs
-  skip model routing. `--router ID` overrides routing. Repeated `--image` accepts
-  local PNG/JPEG/WebP/GIF paths (encoded as data URLs), HTTP(S) URLs, or image data
-  URLs. Tool-call deltas go to stderr; execution of tools is not implemented.
-- `lh models pull SPECIALIST_OR_ROUTER_ID` calls `backend/load`. Router keys are
-  `router:ID` and pinned; specialist keys are their IDs and unpinned. This command
-  verifies readiness, prints the backend result, and shuts down its plugin process;
-  it leaves downloaded files cached, not a running server.
+Each object requires `prompt`, `expected`. Optional: `language`, `images`, `audio`,
+`specialist`, `session`. Unknown fields are rejected. Session IDs group successful
+turns; omitted media fields inherit previous attachments, explicit `[]` clears
+that modality. Independent rows have fresh session state. References test routing,
+not media comprehension: dummy references need not exist for a single-candidate
+shortcut, but are not cacheable. Baseline and cascade share conversation handling.
 
-Offline verification: `cargo test --offline -p lh-cli -p lh-mock-backend` builds
-and exercises the actual mock backend. The CLI-only `base64` dependency encodes
-local image attachments; no HTTP/inference dependency is added to the core.
+Reports include accuracy (errors count as incorrect), sparse confusion matrix,
+model call count/rate, winning-stage counts, ordered traces, per-case decisions,
+errors, and `/proc/loadavg` before/after. Nonzero error count exits 1 after printing
+JSON; incorrect predictions alone do not. Empty datasets fail. Invalid rows
+remain in the accuracy denominator but have no routing latency sample.
+
+`latency.total` is nearest-rank p50/p95 wall routing latency in milliseconds,
+measured at microsecond precision. It includes startup/load and attempted routes.
+The legacy `decision_model` and `fastpaths` groups use integer `router_ms`.
+Empty buckets report null. Run one model job at a time and report load with every
+latency number; these are not pure warm-inference or controlled CPU benchmarks.
+
+`python3 scripts/eval_m2c.py` reproduces the sequential measurements from cached
+weights, verifies the frozen held-out hash and refuses existing llama-server
+processes. `--only heldout-cascade` (or another set/mode pair) runs one batch.
+All four batches can exceed an interactive tool timeout; use a tracked background
+process. Each CLI shuts down its backend before the next batch. Results and
+limitations: [M2C-RESULTS.md](../docs/M2C-RESULTS.md).
+
+Audio ASR/TTS are routing-only until M4. `lh run` supports chat, with image
+encoding in the CLI; `lh models pull` loads then shuts down. No inference or HTTP
+dependency was added to the core.

@@ -1,7 +1,7 @@
 # liquid-harness – Architecture
 
-Status: M2 and M2b implemented (llama.cpp and opt-in FreeToken backends,
-capability-aware backend fallback, streaming one-shot CLI, routing evaluation).
+Status: M2, M2b and M2c implemented (llama.cpp and opt-in FreeToken backends,
+capability-aware fallback, routing cascade, sessions and held-out evaluation).
 Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
@@ -217,6 +217,79 @@ M1 transport details:
 
 ## 5. Routing (the core)
 
+### M2c cascade (current behavior)
+
+`Engine::route` is stateless conversation-wise; `route_session(input, router,
+&mut Session)` keeps the previous input and chosen specialist. Only successful
+routes advance the caller-owned session; `Session::reset()` clears it. Both
+use the same engine-local bounded decision cache. The cascade runs:
+
+1. Explicit specialist, with input and (when enabled) requirement validation.
+2. Input-modality filtering, then `requires` filtering. `inputs` says what a
+   specialist accepts; `requires = ["image"]` or `["audio"]` says what must exist.
+   Zero candidates is an error. One remaining candidate skips inference;
+   reason is `requires` when that filter reduced the set, otherwise `single-candidate`.
+3. Weighted literal phrase hints. `hints = [{pattern = "bitte vorlesen", weight = 1.0}]`
+   matches contiguous case-insensitive Unicode words (punctuation separates words).
+   This is not regex. Exactly one specialist with positive evidence and score
+   at least `hint_threshold` wins; any competing evidence falls through.
+4. Sticky: keep the previous compatible specialist on unchanged image/audio
+   presence and no hint evidence for another specialist. This happens before
+   the weak text-default shortcut, so a voice followup is not lost to text.
+   A unique `default_for_text = true` wins only on text-only turns with no hints.
+   It reports `hint`, with `default-text` in the trace. The shipped LFM3 pack
+   deliberately does not enable this broad default: unrecognized speech requests
+   still deserve a model decision.
+5. In-process LRU (256 entries by default), with normalized whitespace (case
+   preserved), full candidate metadata, router ID/model, config and session
+   context in a hashed key, plus exact key comparison. Local attachment bytes
+   are streamed into fingerprints; data URLs are content-addressed by their
+   reference. Unreadable files and remote URLs bypass cache. Mutable local files
+   are fingerprinted again on every eligible lookup. Cache only stores successful
+   model/rules decisions, never errors. No disk persistence or cross-engine reuse.
+6. The existing decision model, including low-confidence fallback. With a
+   session, its state contains the previous user turn/specialist and current
+   user turn (not full chat history or assistant outputs). Rules remains an
+   explicit offline alternative, not a claimed d1 decision.
+
+Every decision has `reason`, ordered `stages`, and `model_called`; `router_ms`
+measures all routing stages. `lh route --explain` pretty-prints this trace.
+Reasons: `explicit`, `requires`, `single-candidate`, `hint`, `sticky`, `cache`,
+`decision-model`, `low-confidence` (plus `rules` for the offline strategy).
+
+Configuration, all defaults shown:
+
+```toml
+[cascade]
+enabled = true
+requires = true
+single_candidate = true
+hints = true
+sticky = true
+cache = true
+cache_capacity = 256
+hint_threshold = 1.0
+```
+
+Disabling `enabled` skips every optional cascade stage; explicit selection and
+modality safety remain intentional invariants. `lh eval routing --baseline`
+sets this switch for a genuine model baseline, including sole candidates.
+No new dependency: literal phrase matching avoids regex binary/dependency cost.
+
+LFM3-VL requires images; `lfm3-audio` requires audio for transcription/listening.
+`lfm3-speak` is a separate text-input TTS specialist using the same audio model.
+Both audio tasks remain routing-only until M4. The mock specialist pack is now
+`tests/fixtures/mock-pack`, discovered only by explicit test/demo paths, never
+by default repository discovery. The default rules specialist is `lfm3-text`.
+
+Evaluation reports actual model calls/rate, winning-stage counts and nearest-rank
+p50/p95 total wall latency, measured at microsecond precision and reported in ms.
+Optional JSONL `session` groups turns; omitted attachments inherit from the prior
+successful turn, explicit empty arrays clear them. Session state is separate per
+ID and identical in baseline/cascade. The core API itself takes explicit media
+state; attachment inheritance is evaluator policy. See [M2c results](M2C-RESULTS.md)
+for the frozen held-out methodology, tuning-set migration, load and limitations.
+
 ### M2b FreeToken lifecycle
 
 The separate `lh-backend-freetoken` uses ureq with TLS for remote URL mode and
@@ -263,7 +336,8 @@ manifest/routing-only; `lh run` rejects non-chat specialist tasks until M4.
 LFM3 chat disables thinking by default to avoid an invisible reasoning-only
 answer exhausting the short completion budget (256 tokens, overridable in pack).
 
-Routing is the central feature and is built first.
+The original M1/M2 model path is shown below for protocol context; M2c inserts
+the cascade described above between modality filtering and this model path.
 
 ```
 Request ─► 1. explicit? ──yes──► specialist by id/alias
@@ -301,10 +375,8 @@ Request ─► 1. explicit? ──yes──► specialist by id/alias
   in that probe: 7/7 correct (EN+DE), winning probability 0.89–0.997.
   Because a router call is not free, avoid it whenever possible: explicit model, single
   candidate after the modality filter, and sticky routing skip the model call.
-- Sticky routing: within one conversation the previous specialist is kept unless
-  the new turn changes modality or the router is ≥ 0.8 confident in another one.
-  M1 exposes this as a pure function; conversation state and pre-call sticky shortcuts
-  belong to M3. Explicit specialists still undergo modality validation.
+- The legacy post-decision `sticky` helper retains its 0.8 confidence threshold;
+  new conversations use the pre-call M2c session policy above instead.
 - If the configured default is not a modality-compatible candidate, M1 uses the first
   compatible ID in lexical order. Low-confidence decisions preserve the winning model
   probability and full original score distribution, even when the specialist is replaced.
@@ -330,7 +402,7 @@ plugins/backend-freetoken Binary `lh-backend-freetoken`: URL or managed ft serve
                       readiness, LRU/TTL, chat/SSE only; explicitly opt-in.
 plugins/mock-backend  Deterministic backend (Unicode echo/three stream chunks,
                       decide via case-insensitive word overlap, with normalized scores).
-plugins/mock-pack     Offline text/vision/audio specialists and mock-router fixture.
+tests/fixtures/mock-pack  Explicitly loaded offline specialists and mock-router fixture.
 plugins/lfm3          Manifest-only specialist + router pack.
 ```
 
@@ -374,8 +446,8 @@ llama_server = "/opt/llama.cpp/llama-server"
 threads = 8
 ```
 
-M1 defaults to `router = "rules"` and `default_specialist = "mock-text"` so the
-included fixture pack works without configuration. Precedence is `--config`, then
+Defaults are `router = "rules"` and `default_specialist = "lfm3-text"`.
+Offline fixture users explicitly select mock paths and defaults. Precedence is `--config`, then
 `LH_CONFIG`, then the XDG default (`$HOME/.config` if XDG_CONFIG_HOME is unset).
 An explicitly named missing file is an error; a missing default file uses defaults.
 Relative `plugin_path` entries are relative to the configuration file. When a config

@@ -66,7 +66,10 @@ enum Models {
 enum Eval {
     /// Evaluate labelled JSONL routing cases without running specialists.
     Routing {
-        #[arg(long, default_value = "evals/routing.jsonl")]
+        /// Disable all cascade shortcuts (explicit selection and modality safety remain).
+        #[arg(long)]
+        baseline: bool,
+        #[arg(long, default_value = "evals/routing-tuning.jsonl")]
         file: PathBuf,
         #[arg(long)]
         router: Option<String>,
@@ -104,9 +107,17 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", json::to_string_pretty(&result?)?);
         }
         Commands::Eval {
-            command: Eval::Routing { file, router },
+            command:
+                Eval::Routing {
+                    file,
+                    router,
+                    baseline,
+                },
         } => {
             let mut engine = Engine::new(registry, config);
+            if baseline {
+                engine.config.cascade.enabled = false;
+            }
             let result = routing_eval::evaluate(&mut engine, &file, router.as_deref()).await;
             engine.shutdown().await;
             let report = result?;

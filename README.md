@@ -22,6 +22,10 @@ Requires Rust 1.99+ (edition 2024). From the repository root:
 ```sh
 cargo build --workspace --release
 export PATH="$PWD/target/release:$PATH"
+repo="$PWD"
+export LH_PLUGIN_PATH="$repo/plugins/mock-backend:$repo/tests/fixtures/mock-pack"
+# Keep real ./plugins out of this explicitly offline demo.
+cd "$(mktemp -d)"
 lh plugins list
 lh route --explain --router mock-router "coding programming tools"
 lh route --image picture.png "describe this"
@@ -31,7 +35,8 @@ lh route --audio voice.wav "transcribe this"
 The mock backend needs no models or network. `--image`/`--audio` attach references
 for routing; M1 does not open or encode these files. Plain routing defaults to
 deterministic rules; `--router mock-router` exercises the JSON-RPC decision backend.
-The built-in pack exposes `mock-text`, `mock-vision`, and `mock-audio`.
+The explicitly loaded fixture pack exposes `mock-text`, `mock-vision`, and
+`mock-audio`; repository defaults contain only real LFM3 specialists.
 
 Plugin search: `LH_PLUGIN_PATH`, configured `plugin_path`, the config directory's
 `plugins`, and `./plugins`. Commands resolve beside their manifest first, then beside
@@ -64,13 +69,14 @@ export PATH="$repo/target/release:/opt/data/tools/llama.cpp/llama-b12189:$PATH"
 export LD_LIBRARY_PATH=/opt/data/tools/llama.cpp/llama-b12189
 export LLAMA_CACHE=/opt/data/models/llama-cache
 export LH_CONFIG="$repo/examples/lfm3.toml"
-# Avoid also discovering ./plugins/mock-pack. Discovery paths are additive.
-cd "$(mktemp -d)"
+unset LH_PLUGIN_PATH # remove any explicit offline-demo fixture paths
 lh models pull d1
 lh models pull lfm3-text
 lh run "Explain a Rust mutex in two sentences."
 lh run --image /absolute/path/photo.png "Describe this photo."
-lh eval routing --file "$repo/evals/routing.jsonl"
+lh eval routing --file "$repo/evals/routing-tuning.jsonl"
+lh eval routing --file "$repo/evals/routing-heldout.jsonl"
+# Add --baseline to either command to disable the routing cascade.
 ```
 
 HF sources may download weights; `models pull` verifies model readiness then

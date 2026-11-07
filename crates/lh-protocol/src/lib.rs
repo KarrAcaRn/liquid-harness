@@ -64,6 +64,13 @@ pub struct Run {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Specialist {
+    /// Required request modalities (text, image, audio), beyond supported inputs.
+    #[serde(default)]
+    pub requires: Vec<String>,
+    #[serde(default)]
+    pub hints: Vec<Hint>,
+    #[serde(default)]
+    pub default_for_text: bool,
     pub id: String,
     pub route: String,
     pub task: String,
@@ -79,6 +86,13 @@ pub struct Specialist {
     pub backends: Vec<BackendChoice>,
     #[serde(default = "object")]
     pub params: Value,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Hint {
+    /// Literal Unicode word phrase, case-insensitive; never a regular expression.
+    pub pattern: String,
+    pub weight: f64,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -145,6 +159,10 @@ pub struct Candidate {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteDecision {
+    #[serde(default)]
+    pub stages: Vec<String>,
+    #[serde(default)]
+    pub model_called: bool,
     pub specialist: String,
     /// None for route-only decisions; set after successful loading.
     #[serde(default)]
@@ -399,6 +417,8 @@ mod tests {
             candidate
         );
         let decision = RouteDecision {
+            stages: vec![],
+            model_called: false,
             specialist: "vision".into(),
             backend: None,
             confidence: 0.9,

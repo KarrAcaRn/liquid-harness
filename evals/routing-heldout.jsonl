@@ -1,0 +1,40 @@
+{"prompt":"What is the difference between a verbatim transcript and meeting minutes?","expected":"lfm3-text","language":"en"}
+{"prompt":"Write a welcoming speech for a new librarian; return the script, not a recording.","expected":"lfm3-text","language":"en"}
+{"prompt":"I cannot attach the photo. What information would you need to help identify the plant?","expected":"lfm3-text","language":"en"}
+{"prompt":"Help me explain recursion to a beginner using a short written example.","expected":"lfm3-text","language":"en","session":"heldout-en-explanation"}
+{"prompt":"Can you say that more simply? Keep your answer in writing.","expected":"lfm3-text","language":"en","session":"heldout-en-explanation"}
+{"prompt":"Wie unterscheidet sich automatische Spracherkennung von einer Sprachsynthese?","expected":"lfm3-text","language":"de"}
+{"prompt":"Formuliere eine Durchsage für die Bibliothek. Ich brauche nur den Wortlaut, keine Sprachausgabe.","expected":"lfm3-text","language":"de"}
+{"prompt":"Auf meinem Bildschirm erscheint manchmal eine Fehlermeldung. Welche Angaben soll ich dir dazu schicken?","expected":"lfm3-text","language":"de"}
+{"prompt":"Erkläre mir schriftlich, warum Brot beim Backen aufgeht.","expected":"lfm3-text","language":"de","session":"heldout-de-explanation"}
+{"prompt":"Wie würdest du das einem Kind sagen? Bitte als kurzen Text.","expected":"lfm3-text","language":"de","session":"heldout-de-explanation"}
+{"prompt":"Which of these two buttons would save my changes?","expected":"lfm3-vl","language":"en","images":["fixtures/heldout/settings-panel.png"]}
+{"prompt":"Does this look safe to plug in? Base your answer on the visible damage.","expected":"lfm3-vl","language":"en","images":["fixtures/heldout/frayed-cable.jpg"]}
+{"prompt":"The note is sideways. What does the handwritten line at the bottom say?","expected":"lfm3-vl","language":"en","images":["fixtures/heldout/rotated-note.png"]}
+{"prompt":"Compare the heights of the bars in this figure.","expected":"lfm3-vl","language":"en","images":["fixtures/heldout/monthly-bars.png"],"session":"heldout-en-chart"}
+{"prompt":"And which one is second tallest in that same figure?","expected":"lfm3-vl","language":"en","session":"heldout-en-chart"}
+{"prompt":"Welche der abgebildeten Fahrkarten gilt auch nach Mitternacht?","expected":"lfm3-vl","language":"de","images":["fixtures/heldout/tickets.jpg"]}
+{"prompt":"Ist hier genug Platz zwischen dem Sofa und der Tür, damit sie aufgehen kann?","expected":"lfm3-vl","language":"de","images":["fixtures/heldout/room-layout.png"]}
+{"prompt":"Was steht auf dem kleinen Schild hinter dem Tresen?","expected":"lfm3-vl","language":"de","images":["fixtures/heldout/shop-counter.jpg"]}
+{"prompt":"Welche Zutaten erkennst du auf dieser Verpackung?","expected":"lfm3-vl","language":"de","images":["fixtures/heldout/ingredient-label.jpg"],"session":"heldout-de-label"}
+{"prompt":"Steht auf derselben Verpackung auch ein Hinweis auf Nüsse?","expected":"lfm3-vl","language":"de","session":"heldout-de-label"}
+{"prompt":"Put what the caller says into writing, including the address.","expected":"lfm3-audio","language":"en","audio":["fixtures/heldout/caller-address.wav"]}
+{"prompt":"I missed the last announcement. Give me its exact wording.","expected":"lfm3-audio","language":"en","audio":["fixtures/heldout/station-announcement.wav"]}
+{"prompt":"Please turn this into text, keeping the hesitations rather than polishing them away.","expected":"lfm3-audio","language":"en","audio":["fixtures/heldout/interview-excerpt.wav"]}
+{"prompt":"Write down the words in this voice memo, without translating them.","expected":"lfm3-audio","language":"en","audio":["fixtures/heldout/voice-memo.wav"],"session":"heldout-en-memo"}
+{"prompt":"Listen to the beginning again and transcribe only the first sentence.","expected":"lfm3-audio","language":"en","session":"heldout-en-memo"}
+{"prompt":"Schreibe auf, was die Anruferin sagt, einschließlich der genannten Telefonnummer.","expected":"lfm3-audio","language":"de","audio":["fixtures/heldout/anruf.wav"]}
+{"prompt":"Ich habe die Durchsage nicht verstanden. Gib mir den gesprochenen Wortlaut als Text.","expected":"lfm3-audio","language":"de","audio":["fixtures/heldout/bahnhof.wav"]}
+{"prompt":"Bitte verschriftliche diese Aufnahme wortgetreu, auch die abgebrochenen Sätze.","expected":"lfm3-audio","language":"de","audio":["fixtures/heldout/gespraech.wav"]}
+{"prompt":"Übertrage die gesprochenen Sätze dieser Nachricht in geschriebenen Text.","expected":"lfm3-audio","language":"de","audio":["fixtures/heldout/sprachnachricht.wav"],"session":"heldout-de-message"}
+{"prompt":"Hör dir den Schluss noch einmal an und schreibe die letzten gesprochenen Wörter auf.","expected":"lfm3-audio","language":"de","session":"heldout-de-message"}
+{"prompt":"Read this aloud for me: The next stop is Willow Street.","expected":"lfm3-speak","language":"en"}
+{"prompt":"Produce a spoken version of these words: Your appointment has been confirmed.","expected":"lfm3-speak","language":"en"}
+{"prompt":"I want to hear the phrase 'good evening' spoken slowly, not see a pronunciation guide.","expected":"lfm3-speak","language":"en"}
+{"prompt":"Say this out loud in a calm voice: Take your time. There is no rush.","expected":"lfm3-speak","language":"en","session":"heldout-en-voice"}
+{"prompt":"Again, with a longer pause between those two sentences.","expected":"lfm3-speak","language":"en","session":"heldout-en-voice"}
+{"prompt":"Lies mir bitte laut vor: Der Eingang befindet sich auf der Rückseite.","expected":"lfm3-speak","language":"de"}
+{"prompt":"Erzeuge eine hörbare Ansage aus diesem Text: Bitte halten Sie den Durchgang frei.","expected":"lfm3-speak","language":"de"}
+{"prompt":"Ich möchte hören, wie du 'Schönen Feierabend' langsam aussprichst. Keine schriftliche Erklärung.","expected":"lfm3-speak","language":"de"}
+{"prompt":"Sprich diese beiden Sätze mit freundlicher Stimme: Willkommen zurück. Schön, dass du da bist.","expected":"lfm3-speak","language":"de","session":"heldout-de-voice"}
+{"prompt":"Noch einmal, aber diesmal etwas langsamer und leiser.","expected":"lfm3-speak","language":"de","session":"heldout-de-voice"}

@@ -1,0 +1,1035 @@
+{
+  "accuracy": 1.0,
+  "cascade_enabled": false,
+  "confusion_matrix": {
+    "lfm3-audio": {
+      "lfm3-audio": 8
+    },
+    "lfm3-speak": {
+      "lfm3-speak": 4
+    },
+    "lfm3-text": {
+      "lfm3-text": 17
+    },
+    "lfm3-vl": {
+      "lfm3-vl": 13
+    }
+  },
+  "confusion_matrix_axes": {
+    "columns": "predicted",
+    "rows": "expected"
+  },
+  "correct": 42,
+  "d1_call_rate": 0.9523809523809523,
+  "error_count": 0,
+  "errors": [],
+  "file": "/opt/data/home/projects/liquid-harness/.worktrees/t_1045dabc/evals/routing-tuning.jsonl",
+  "latency": {
+    "decision_model": {
+      "count": 40,
+      "p50_ms": 2441,
+      "p95_ms": 5415
+    },
+    "fastpaths": {
+      "count": 2,
+      "p50_ms": 0,
+      "p95_ms": 0
+    },
+    "note": "Nearest-rank milliseconds; total measured with microsecond precision; includes startup/load and all attempted routes.",
+    "total": {
+      "count": 42,
+      "p50_ms": 2408.36,
+      "p95_ms": 5415.907
+    }
+  },
+  "loadavg": {
+    "after": "8.59 5.77 5.43 4/2106 1913039",
+    "before": "1.96 3.98 4.91 4/2052 1912534"
+  },
+  "model_calls": 40,
+  "results": [
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9942269175993173,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4900,
+        "scores": {
+          "lfm3-audio": 0.0018998333440583123,
+          "lfm3-speak": 0.0022143975220310047,
+          "lfm3-text": 0.9942269175993173,
+          "lfm3-vl": 0.001658851534593518
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 1
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.993999258503916,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3703,
+        "scores": {
+          "lfm3-audio": 0.0019310747999546729,
+          "lfm3-speak": 0.0024693559167779373,
+          "lfm3-text": 0.993999258503916,
+          "lfm3-vl": 0.001600310779351575
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 2
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9921893044287656,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3800,
+        "scores": {
+          "lfm3-audio": 0.0021066001000029956,
+          "lfm3-speak": 0.002784946583261798,
+          "lfm3-text": 0.9921893044287656,
+          "lfm3-vl": 0.002919148887969437
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 3
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9879095321991312,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4154,
+        "scores": {
+          "lfm3-audio": 0.0024546299809602534,
+          "lfm3-speak": 0.004883536828780297,
+          "lfm3-text": 0.9879095321991312,
+          "lfm3-vl": 0.004752300991128405
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 4
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9818435322433636,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4459,
+        "scores": {
+          "lfm3-audio": 0.0024500389207760763,
+          "lfm3-speak": 0.013272454687190658,
+          "lfm3-text": 0.9818435322433636,
+          "lfm3-vl": 0.002433974148669438
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 5
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9869274343589112,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4734,
+        "scores": {
+          "lfm3-audio": 0.0022494602753593274,
+          "lfm3-speak": 0.008919727369718352,
+          "lfm3-text": 0.9869274343589112,
+          "lfm3-vl": 0.001903377996011111
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 6
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9888365516835024,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4078,
+        "scores": {
+          "lfm3-audio": 0.002771931120948377,
+          "lfm3-speak": 0.005695548527641043,
+          "lfm3-text": 0.9888365516835024,
+          "lfm3-vl": 0.0026959686679080257
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 7
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.98373253322494,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4519,
+        "scores": {
+          "lfm3-audio": 0.004376564652711558,
+          "lfm3-speak": 0.00714982312290799,
+          "lfm3-text": 0.98373253322494,
+          "lfm3-vl": 0.0047410789994400794
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 8
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9543857937527864,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4546,
+        "scores": {
+          "lfm3-audio": 0.009300845673857652,
+          "lfm3-speak": 0.026393169236748112,
+          "lfm3-text": 0.9543857937527864,
+          "lfm3-vl": 0.0099201913366077
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 9
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.906804919656773,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4657,
+        "scores": {
+          "lfm3-audio": 0.011129992217119364,
+          "lfm3-speak": 0.07186443514731493,
+          "lfm3-text": 0.906804919656773,
+          "lfm3-vl": 0.010200652978792649
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 10
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.960907253646226,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4359,
+        "scores": {
+          "lfm3-audio": 0.002479239911871161,
+          "lfm3-speak": 0.033797169282674795,
+          "lfm3-text": 0.960907253646226,
+          "lfm3-vl": 0.0028163371592280426
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 11
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9507833022099926,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4630,
+        "scores": {
+          "lfm3-audio": 0.003502755877732314,
+          "lfm3-speak": 0.03946849291139045,
+          "lfm3-text": 0.9507833022099926,
+          "lfm3-vl": 0.006245449000884571
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 12
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1630,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 13
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1802,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 14
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1586,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 15
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1908,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 16
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1636,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 17
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1788,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 18
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1813,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 19
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1867,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 20
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1939,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 21
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 2094,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 22
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1691,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 23
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1718,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 24
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1920,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 25
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 2441,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 26
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9949643825916834,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 5215,
+        "scores": {
+          "lfm3-audio": 0.0018854127375392549,
+          "lfm3-speak": 0.9949643825916834,
+          "lfm3-text": 0.0024907019640674904,
+          "lfm3-vl": 0.0006595027067098116
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "en",
+      "line": 27
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9934240879625068,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 5936,
+        "scores": {
+          "lfm3-audio": 0.002328938244040309,
+          "lfm3-speak": 0.9934240879625068,
+          "lfm3-text": 0.00325369819463164,
+          "lfm3-vl": 0.0009932755988214294
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "de",
+      "line": 28
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9907899225869892,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 5278,
+        "scores": {
+          "lfm3-audio": 0.0021800379089143658,
+          "lfm3-speak": 0.9907899225869892,
+          "lfm3-text": 0.0060955712410185985,
+          "lfm3-vl": 0.0009344682630778768
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "en",
+      "line": 29
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9922134980727692,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 5415,
+        "scores": {
+          "lfm3-audio": 0.0018671331486056731,
+          "lfm3-speak": 0.9922134980727692,
+          "lfm3-text": 0.004985897857772487,
+          "lfm3-vl": 0.000933470920852592
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "de",
+      "line": 30
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 2454,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 31
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 2408,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 32
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1981,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 33
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 2116,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 34
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "explicit",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-text": 1.0
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 35
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "explicit",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-text": 1.0
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 36
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.8241212609856412,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 5128,
+        "scores": {
+          "lfm3-audio": 0.011984715470284627,
+          "lfm3-speak": 0.158523024653401,
+          "lfm3-text": 0.8241212609856412,
+          "lfm3-vl": 0.00537099889067312
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 37
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9713932363530956,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4935,
+        "scores": {
+          "lfm3-audio": 0.0027220590052400477,
+          "lfm3-speak": 0.009999846727605306,
+          "lfm3-text": 0.9713932363530956,
+          "lfm3-vl": 0.015884857914059063
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 38
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1725,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 39
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 1928,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 40
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 2228,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 41
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.8726055103115768,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 5841,
+        "scores": {
+          "lfm3-audio": 0.022306574212016705,
+          "lfm3-speak": 0.100703984015202,
+          "lfm3-text": 0.8726055103115768,
+          "lfm3-vl": 0.004383931461204407
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 42
+    }
+  ],
+  "router": "d1",
+  "stage_counts": {
+    "decision-model": 40,
+    "explicit": 2
+  },
+  "total": 42
+}

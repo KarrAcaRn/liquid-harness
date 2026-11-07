@@ -14,6 +14,12 @@ impl Fixture {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(dir.join("liquid-harness")).unwrap();
+        std::fs::write(
+            dir.join("liquid-harness/config.toml"),
+            "default_specialist='mock-text'\n",
+        )
+        .unwrap();
         Self(dir)
     }
     fn command(&self) -> Command {
@@ -23,11 +29,13 @@ impl Fixture {
             .env("XDG_CONFIG_HOME", &self.0)
             .env(
                 "LH_PLUGIN_PATH",
-                std::env::join_paths(["mock-backend", "mock-pack"].map(|name| {
-                    Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("../../plugins")
-                        .join(name)
-                }))
+                std::env::join_paths(["plugins/mock-backend", "tests/fixtures/mock-pack"].map(
+                    |name| {
+                        Path::new(env!("CARGO_MANIFEST_DIR"))
+                            .join("../..")
+                            .join(name)
+                    },
+                ))
                 .unwrap(),
             )
             .env(
@@ -54,6 +62,50 @@ fn output(mut c: Command, args: &[&str]) -> Value {
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     json::from_slice(&o.stdout).unwrap()
 }
+#[test]
+fn default_repo_discovery_has_only_real_specialists() {
+    let f = Fixture::new();
+    let mut c = f.command();
+    c.current_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))
+        .env_remove("LH_PLUGIN_PATH");
+    let result = output(c, &["plugins", "list"]);
+    assert_eq!(
+        result["specialists"],
+        json::json!(["lfm3-audio", "lfm3-speak", "lfm3-text", "lfm3-vl"])
+    );
+    assert_eq!(result["routers"], json::json!(["d1"]));
+}
+
+#[test]
+fn eval_sessions_inherit_media_clear_explicitly_and_baseline_counts_calls() {
+    let f = Fixture::new();
+    let cases = f.0.join("conversation.jsonl");
+    std::fs::write(&cases, concat!(
+        "{\"session\":\"one\",\"prompt\":\"picture\",\"images\":[\"fixture.png\"],\"expected\":\"mock-vision\"}\n",
+        "{\"session\":\"one\",\"prompt\":\"more\",\"expected\":\"mock-vision\"}\n",
+        "{\"session\":\"one\",\"prompt\":\"coding programming tools\",\"images\":[],\"expected\":\"mock-text\"}\n",
+        "{\"session\":\"two\",\"prompt\":\"coding programming tools\",\"expected\":\"mock-text\"}\n"
+    )).unwrap();
+    let args = [
+        "eval",
+        "routing",
+        "--file",
+        cases.to_str().unwrap(),
+        "--router",
+        "mock-router",
+    ];
+    let report = output(f.command(), &args);
+    assert_eq!(report["correct"], 4);
+    assert_eq!(report["model_calls"], 2);
+    assert_eq!(report["stage_counts"]["single-candidate"], 2);
+    assert_eq!(report["latency"]["total"]["count"], 4);
+    let mut c = f.command();
+    c.args(args).arg("--baseline");
+    let baseline = output(c, &[]);
+    assert_eq!(baseline["model_calls"], 4);
+    assert_eq!(baseline["d1_call_rate"], 1.0);
+}
+
 fn failed(o: Output, expected: &str) {
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains(expected));
@@ -284,7 +336,7 @@ fn plugin_resolution_uses_sibling_without_path_and_reports_search_locations() {
     let mut command = f.command();
     command.env("PATH", "").env(
         "LH_PLUGIN_PATH",
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/mock-pack"),
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/mock-pack"),
     );
     let result = command
         .args(["route", "--router", "mock-router", "coding"])

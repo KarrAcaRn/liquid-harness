@@ -45,6 +45,9 @@ def prepare(directory):
         dest.mkdir(parents=True)
         (dest / 'plugin.toml').write_text(text)
     config = directory / 'config.toml'
+    ft = directory / 'plugins' / 'freetoken'
+    ft.mkdir()
+    (ft / 'plugin.toml').write_text((ROOT / 'plugins/backend-freetoken/plugin.toml').read_text())
     config.write_text('router = "d1"\ndefault_specialist = "lfm3-text"\n')
     env = dict(os.environ, LH_PLUGIN_PATH='', LH_CONFIG=str(config), XDG_CONFIG_HOME=str(directory))
     env['LD_LIBRARY_PATH'] = str(Path(server).parent) + ':' + env.get('LD_LIBRARY_PATH', '')

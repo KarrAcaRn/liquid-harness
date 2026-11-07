@@ -1,4 +1,7 @@
-use crate::{Config, Error, Host, Registry, Result};
+use crate::{
+    Config, Error, Host, Registry, Result, Session,
+    cascade::{RouteCache, hint_score, requirements},
+};
 use lh_protocol::{
     Answer, DecideRequest, DecideResponse, Question, RouteDecision, RouteInput, Specialist,
     json::{self, json},
@@ -9,6 +12,8 @@ pub struct Engine {
     pub registry: Registry,
     pub config: Config,
     hosts: BTreeMap<String, Host>,
+    cache: RouteCache,
+    model_calls: u64,
 }
 impl Engine {
     pub fn new(registry: Registry, config: Config) -> Self {
@@ -16,7 +21,13 @@ impl Engine {
             registry,
             config,
             hosts: BTreeMap::new(),
+            cache: RouteCache::default(),
+            model_calls: 0,
         }
+    }
+    /// Number of backend/decide attempts, including failed requests.
+    pub fn model_calls(&self) -> u64 {
+        self.model_calls
     }
     pub fn host(&mut self, id: &str) -> Result<Host> {
         if !self.enabled(id) {
@@ -127,14 +138,51 @@ impl Engine {
         input: &RouteInput,
         router_override: Option<&str>,
     ) -> Result<RouteDecision> {
+        self.route_session(input, router_override, &mut Session::default())
+            .await
+    }
+    /// Route one turn and advance caller-owned state only on success.
+    pub async fn route_session(
+        &mut self,
+        input: &RouteInput,
+        router_override: Option<&str>,
+        session: &mut Session,
+    ) -> Result<RouteDecision> {
         let start = Instant::now();
+        let mut result = self.route_inner(input, router_override, session).await?;
+        result.router_ms = start.elapsed().as_millis() as u64;
+        session.remember(input, &result);
+        Ok(result)
+    }
+    async fn route_inner(
+        &mut self,
+        input: &RouteInput,
+        router_override: Option<&str>,
+        session: &Session,
+    ) -> Result<RouteDecision> {
+        let start = Instant::now();
+        let config = self.config.cascade.clone();
+        if !config.hint_threshold.is_finite() || config.hint_threshold <= 0.0 {
+            return Err(Error::new(
+                -32602,
+                "cascade hint_threshold must be finite and positive",
+            ));
+        }
+        self.cache.resize(if config.enabled && config.cache {
+            config.cache_capacity
+        } else {
+            0
+        });
+        let mut stages = vec!["explicit".into()];
         if let Some(id) = input.specialist.as_deref().filter(|s| *s != "auto") {
             let specialist = self
                 .registry
                 .specialists
                 .get(id)
                 .ok_or_else(|| Error::new(-32602, format!("unknown specialist '{id}'")))?;
-            if !supports(specialist, input) {
+            if !supports(specialist, input)
+                || (config.enabled && config.requires && !requirements(specialist, input))
+            {
                 return Err(Error::new(
                     -32003,
                     "explicit specialist does not support the requested modality",
@@ -142,13 +190,19 @@ impl Engine {
             }
             return Ok(decision(id, "explicit"));
         }
-        let candidates: Vec<_> = self
+        stages.push("modality".into());
+        let mut candidates: Vec<_> = self
             .registry
             .specialists
             .values()
             .filter(|s| supports(s, input))
             .cloned()
             .collect();
+        let before_requires = candidates.len();
+        if config.enabled && config.requires {
+            stages.push("requires".into());
+            candidates.retain(|s| requirements(s, input));
+        }
         if candidates.is_empty() {
             return Err(Error::new(
                 -32003,
@@ -170,8 +224,89 @@ impl Engine {
                     })?,
             )
         };
-        if candidates.len() == 1 {
-            return Ok(decision(&candidates[0].id, "single-candidate"));
+        if config.enabled && config.single_candidate {
+            stages.push("single-candidate".into());
+            if candidates.len() == 1 {
+                let reason = if before_requires > candidates.len() {
+                    "requires"
+                } else {
+                    "single-candidate"
+                };
+                return Ok(traced(&candidates[0].id, reason, stages));
+            }
+        }
+        let mut hinted = Vec::new();
+        if config.enabled && config.hints {
+            stages.push("hints".into());
+            for s in &candidates {
+                let score = hint_score(s, &input.prompt);
+                if score > 0.0 {
+                    hinted.push((s, score));
+                }
+            }
+            // Any positive evidence for multiple specialists is ambiguous, even
+            // when one has a higher score. Let the model resolve the conflict.
+            if hinted.len() == 1 && hinted[0].1 >= config.hint_threshold {
+                return Ok(traced(&hinted[0].0.id, "hint", stages));
+            }
+        }
+        if config.enabled && config.sticky {
+            stages.push("sticky".into());
+            if let Some(previous) = &session.previous_specialist
+                && session.same_modality(input)
+                && candidates.iter().any(|s| &s.id == previous)
+                && hinted.iter().all(|(s, _)| &s.id == previous)
+            {
+                return Ok(traced(previous, "sticky", stages));
+            }
+        }
+        // A text default is weak evidence: never displace a valid sticky route,
+        // nor conceal conflicting or below-threshold phrase evidence.
+        if config.enabled
+            && config.hints
+            && hinted.is_empty()
+            && input.images.is_empty()
+            && input.audio.is_empty()
+        {
+            let defaults: Vec<_> = candidates.iter().filter(|s| s.default_for_text).collect();
+            if defaults.len() == 1 {
+                stages.push("default-text".into());
+                return Ok(traced(&defaults[0].id, "hint", stages));
+            }
+        }
+        // JSON retains full key content for collision-safe equality. Whitespace
+        // normalization preserves case, punctuation, attachment references and
+        // all candidate/router metadata. Session context prevents cross-talk.
+        let mut normalized = input.clone();
+        normalized.prompt = input
+            .prompt
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let fingerprints = crate::cascade::attachment_fingerprints(input);
+        let previous_fingerprints = session
+            .previous_input
+            .as_ref()
+            .map(crate::cascade::attachment_fingerprints);
+        let cacheable = config.enabled
+            && config.cache
+            && fingerprints.is_some()
+            && !matches!(previous_fingerprints, Some(None));
+        let cache_key = json::to_string(&json!({
+            "fingerprints":fingerprints,"previous_fingerprints":previous_fingerprints,
+            "input": normalized, "candidates": candidates, "router_id": selected_router,
+            "router": router, "cascade": config, "default": self.config.default_specialist,
+            "plugins": format!("{:?}", self.config.plugins), "session": session,
+        }))?;
+        if cacheable {
+            stages.push("cache".into());
+            if let Some(mut cached) = self.cache.get(&cache_key) {
+                cached.reason = "cache".into();
+                cached.model_called = false;
+                cached.backend = None;
+                cached.stages = stages;
+                return Ok(cached);
+            }
         }
         let fallback = candidates
             .iter()
@@ -180,7 +315,13 @@ impl Engine {
             .id
             .clone();
         let Some(router) = router.filter(|r| r.strategy != "rules") else {
-            return Ok(decision(&fallback, "rules"));
+            stages.push("rules".into());
+            let result = traced(&fallback, "rules", stages);
+            if cacheable {
+                self.cache
+                    .insert(cache_key, result.clone(), config.cache_capacity);
+            }
+            return Ok(result);
         };
         if router.strategy != "decision-model" {
             return Err(Error::new(
@@ -194,7 +335,15 @@ impl Engine {
             .collect();
         let request = DecideRequest {
             key: format!("router:{}", router.id),
-            state: input.prompt.clone(),
+            state: match &session.previous_input {
+                Some(previous) => format!(
+                    "Previous user turn: {}\nPrevious specialist: {}\nCurrent user turn: {}",
+                    previous.prompt,
+                    session.previous_specialist.as_deref().unwrap_or("unknown"),
+                    input.prompt
+                ),
+                None => input.prompt.clone(),
+            },
             images: if router.inputs.iter().any(|s| s == "image") {
                 input.images.clone()
             } else {
@@ -229,6 +378,7 @@ impl Engine {
             json!({"key":request.key,"model":router.model,"pinned":true}),
         )
         .await?;
+        self.model_calls += 1;
         let response: DecideResponse = json::from_value(
             host.call("backend/decide", json::to_value(request)?)
                 .await?,
@@ -270,7 +420,10 @@ impl Engine {
             .iter()
             .filter(|(name, _)| name.as_str() != "specialist")
             .collect();
-        Ok(RouteDecision {
+        stages.push("model".into());
+        let result = RouteDecision {
+            stages,
+            model_called: true,
             specialist: if low { fallback } else { choice.clone() },
             backend: None,
             confidence,
@@ -283,11 +436,23 @@ impl Engine {
             .into(),
             extras: json::to_value(extras)?,
             router_ms: start.elapsed().as_millis() as u64,
-        })
+        };
+        if cacheable {
+            self.cache
+                .insert(cache_key, result.clone(), config.cache_capacity);
+        }
+        Ok(result)
     }
+}
+fn traced(id: &str, reason: &str, stages: Vec<String>) -> RouteDecision {
+    let mut result = decision(id, reason);
+    result.stages = stages;
+    result
 }
 fn decision(id: &str, reason: &str) -> RouteDecision {
     RouteDecision {
+        stages: vec![reason.into()],
+        model_called: false,
         specialist: id.into(),
         backend: None,
         confidence: 1.0,
@@ -319,6 +484,184 @@ pub fn sticky(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn engine() -> Engine {
+        let mut registry = Registry::default();
+        for value in [
+            json!({"id":"text", "route":"general", "task":"chat", "inputs":["text"], "default_for_text":true}),
+            json!({"id":"voice", "route":"speech", "task":"chat", "inputs":["text"], "hints":[{"pattern":"read aloud","weight":1.0},{"pattern":"laut vorlesen","weight":1.0}]}),
+            json!({"id":"vision", "route":"image", "task":"chat", "inputs":["text","image"], "requires":["image"]}),
+        ] {
+            let s: Specialist = json::from_value(value).unwrap();
+            registry.specialists.insert(s.id.clone(), s);
+        }
+        Engine::new(
+            registry,
+            Config {
+                default_specialist: "text".into(),
+                ..Config::default()
+            },
+        )
+    }
+    fn input(prompt: &str) -> RouteInput {
+        RouteInput {
+            prompt: prompt.into(),
+            ..RouteInput::default()
+        }
+    }
+    #[tokio::test]
+    async fn cascade_hints_defaults_sticky_and_modality() {
+        let mut e = engine();
+        let mut session = Session::default();
+        let d = e
+            .route_session(&input("Bitte laut vorlesen"), None, &mut session)
+            .await
+            .unwrap();
+        assert_eq!(
+            (d.specialist.as_str(), d.reason.as_str(), d.model_called),
+            ("voice", "hint", false)
+        );
+        let d = e
+            .route_session(&input("continue"), None, &mut session)
+            .await
+            .unwrap();
+        assert_eq!(
+            (d.specialist.as_str(), d.reason.as_str()),
+            ("voice", "sticky")
+        );
+        let mut image = input("look");
+        image.images.push("photo.png".into());
+        let d = e.route_session(&image, None, &mut session).await.unwrap();
+        assert_eq!(d.specialist, "vision");
+        assert_eq!(d.reason, "single-candidate");
+        assert!(!d.stages.iter().any(|s| s == "model"));
+        let d = e
+            .route_session(&input("new topic"), None, &mut session)
+            .await
+            .unwrap();
+        assert_eq!(d.specialist, "text");
+        assert_eq!(d.reason, "hint");
+        let mut invalid = image;
+        invalid.specialist = Some("text".into());
+        let before = session.clone();
+        assert!(e.route_session(&invalid, None, &mut session).await.is_err());
+        assert_eq!(session, before);
+    }
+    #[tokio::test]
+    async fn conflicting_hints_bypass_sticky_and_default() {
+        let mut e = engine();
+        e.registry
+            .specialists
+            .get_mut("text")
+            .unwrap()
+            .hints
+            .push(lh_protocol::Hint {
+                pattern: "read aloud".into(),
+                weight: 2.0,
+            });
+        let mut session = Session {
+            previous_specialist: Some("voice".into()),
+            previous_input: Some(input("old")),
+        };
+        let d = e
+            .route_session(&input("read aloud"), None, &mut session)
+            .await
+            .unwrap();
+        assert_eq!(d.reason, "rules");
+        assert!(d.stages.iter().any(|s| s == "cache"));
+    }
+    #[tokio::test]
+    async fn cache_normalization_context_and_invalidation() {
+        let mut e = engine();
+        e.config.cascade.hints = false;
+        let d = e.route(&input("Hello world"), None).await.unwrap();
+        assert_eq!(d.reason, "rules");
+        assert_eq!(
+            e.route(&input(" Hello   world "), None)
+                .await
+                .unwrap()
+                .reason,
+            "cache"
+        );
+        assert_eq!(
+            e.route(&input("hello world"), None).await.unwrap().reason,
+            "rules"
+        );
+        e.registry.specialists.get_mut("text").unwrap().route = "changed".into();
+        assert_eq!(
+            e.route(&input("Hello world"), None).await.unwrap().reason,
+            "rules"
+        );
+        e.config.cascade.sticky = false;
+        let mut session = Session {
+            previous_specialist: Some("voice".into()),
+            previous_input: Some(input("old")),
+        };
+        assert_eq!(
+            e.route_session(&input("Hello world"), None, &mut session)
+                .await
+                .unwrap()
+                .reason,
+            "rules"
+        );
+        e.config.cascade.cache_capacity = 0;
+        assert_eq!(
+            e.route(&input("Hello world"), None).await.unwrap().reason,
+            "rules"
+        );
+        assert_eq!(
+            e.route(&input("Hello world"), None).await.unwrap().reason,
+            "rules"
+        );
+    }
+    #[tokio::test]
+    async fn disabled_cascade_keeps_safety_and_reaches_model_with_one_candidate() {
+        let mut e = engine();
+        e.config.cascade.enabled = false;
+        e.registry.routers.insert(
+            "d1".into(),
+            json::from_value(json!({"id":"d1","strategy":"decision-model"})).unwrap(),
+        );
+        let mut image = input("look");
+        image.images.push("photo".into());
+        // Missing backend proves no single/default/sticky shortcut hid the model path.
+        assert_eq!(
+            e.route(&image, Some("d1")).await.unwrap_err().message,
+            "router needs backend"
+        );
+        image.specialist = Some("text".into());
+        assert_eq!(e.route(&image, Some("d1")).await.unwrap_err().code, -32003);
+        image.specialist = Some("vision".into());
+        assert_eq!(
+            e.route(&image, Some("d1")).await.unwrap().reason,
+            "explicit"
+        );
+        let d = e.route(&input("plain"), None).await.unwrap();
+        assert_eq!(d.stages, vec!["explicit", "modality", "rules"]);
+    }
+    #[tokio::test]
+    async fn individual_flags_and_required_inputs() {
+        let mut e = engine();
+        e.config.cascade.hints = false;
+        e.config.cascade.single_candidate = false;
+        e.config.cascade.cache = false;
+        e.config.cascade.sticky = false;
+        let d = e.route(&input("read aloud"), None).await.unwrap();
+        assert_eq!(d.stages, vec!["explicit", "modality", "requires", "rules"]);
+        let mut image = input("look");
+        image.images.push("photo".into());
+        assert_eq!(e.route(&image, None).await.unwrap().reason, "rules");
+        e.registry.specialists.retain(|id, _| id == "vision");
+        assert_eq!(
+            e.route(&input("plain"), None).await.unwrap_err().code,
+            -32003
+        );
+        e.config.cascade.requires = false;
+        assert_eq!(
+            e.route(&input("plain"), None).await.unwrap().specialist,
+            "vision"
+        );
+    }
     #[test]
     fn sticky_threshold_and_modality_change() {
         let mut d = decision("new", "decision-model");

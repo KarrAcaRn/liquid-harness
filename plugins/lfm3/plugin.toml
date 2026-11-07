@@ -22,6 +22,7 @@ id = "lfm3-vl"
 route = "Analyze an attached picture, screenshot, photograph, chart or scanned document. Read visible text or describe what is in an image. Not general text questions about photography."
 task = "chat"
 inputs = ["text", "image"]
+requires = ["image"]
 outputs = ["text"]
 backend = "llamacpp"
 model = { source = "hf:LiquidAI/LFM3-VL-2B-GGUF:Q4_K_M", mmproj = "auto", ctx = 4096, threads = 8 }
@@ -29,10 +30,21 @@ params = { temperature = 0.1, max_tokens = 256, chat_template_kwargs = { enable_
 
 [[specialist]]
 id = "lfm3-audio"
-route = "Listen to audio, transcribe speech, voicemail or voice messages into text (Sprachaufnahme, Mailboxnachricht, Sprache in Text umwandeln), or generate spoken audio. Not writing text scripts, explaining sound or discussing music in text."
+route = "Listen to attached audio, transcribe speech, voicemail or voice messages into text (Sprachaufnahme, Mailboxnachricht, Sprache in Text umwandeln). Not generating speech or discussing music in text."
 task = "transcribe"
 inputs = ["text", "audio"]
+requires = ["audio"]
 outputs = ["text", "audio"]
+backend = "llamacpp"
+model = { source = "hf:LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M", ctx = 4096, threads = 8 }
+
+[[specialist]]
+id = "lfm3-speak"
+route = "Generate spoken audio from text, read words aloud, text to speech, say something out loud (vorlesen, mit Stimme vorlesen, gesprochene Audionachricht erzeugen). Not explaining speech synthesis, writing a script, or transcribing recordings."
+task = "speak"
+inputs = ["text"]
+outputs = ["audio"]
+hints = [{ pattern = "read this aloud", weight = 1.0 }, { pattern = "please read aloud", weight = 1.0 }, { pattern = "bitte vorlesen", weight = 1.0 }]
 backend = "llamacpp"
 model = { source = "hf:LiquidAI/LFM3-Audio-2B-GGUF:Q4_K_M", ctx = 4096, threads = 8 }
 

@@ -1,6 +1,34 @@
 use crate::{Error, Result};
 use lh_protocol::{json::Value, toml};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+/// All shortcuts can be disabled together for a decision-model baseline.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct CascadeConfig {
+    pub enabled: bool,
+    pub requires: bool,
+    pub hints: bool,
+    pub sticky: bool,
+    pub cache: bool,
+    pub single_candidate: bool,
+    pub cache_capacity: usize,
+    pub hint_threshold: f64,
+}
+impl Default for CascadeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            requires: true,
+            hints: true,
+            sticky: true,
+            cache: true,
+            single_candidate: true,
+            cache_capacity: 256,
+            hint_threshold: 1.0,
+        }
+    }
+}
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -9,6 +37,7 @@ use std::{
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    pub cascade: CascadeConfig,
     pub default_specialist: String,
     pub router: String,
     pub plugin_path: Vec<PathBuf>,
@@ -17,7 +46,8 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            default_specialist: "mock-text".into(),
+            cascade: CascadeConfig::default(),
+            default_specialist: "lfm3-text".into(),
             router: "rules".into(),
             plugin_path: vec![],
             plugins: BTreeMap::new(),

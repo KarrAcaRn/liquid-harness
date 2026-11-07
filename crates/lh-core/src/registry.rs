@@ -79,6 +79,20 @@ impl Registry {
                 }
             }
             for specialist in &manifest.specialist {
+                if specialist.requires.iter().any(|m| {
+                    !["text", "image", "audio"].contains(&m.as_str())
+                        || !specialist.inputs.contains(m)
+                }) || specialist.hints.iter().any(|h| {
+                    h.pattern.trim().is_empty()
+                        || !h.pattern.chars().any(char::is_alphanumeric)
+                        || !h.weight.is_finite()
+                        || h.weight <= 0.0
+                }) {
+                    return Err(Error::new(
+                        -32602,
+                        format!("{}: invalid specialist requires/hints", path.display()),
+                    ));
+                }
                 for choice in specialist
                     .choices()
                     .map_err(|e| Error::new(-32602, format!("{}: {e}", path.display())))?

@@ -13,7 +13,11 @@ use std::{
 
 fn registry() -> Registry {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let mut r = Registry::from_paths(&[root.join("mock-backend"), root.join("mock-pack")]).unwrap();
+    let mut r = Registry::from_paths(&[
+        root.join("mock-backend"),
+        root.join("../tests/fixtures/mock-pack"),
+    ])
+    .unwrap();
     r.plugins
         .get_mut("mock")
         .unwrap()
@@ -176,7 +180,13 @@ async fn mock_supports_all_three_decision_primitives() {
 
 #[tokio::test]
 async fn rules_text_image_audio_and_unsupported_combination() {
-    let mut e = Engine::new(registry(), Config::default());
+    let mut e = Engine::new(
+        registry(),
+        Config {
+            default_specialist: "mock-text".into(),
+            ..Default::default()
+        },
+    );
     assert_eq!(
         e.route(&input("hello"), None).await.unwrap().specialist,
         "mock-text"
@@ -238,6 +248,7 @@ async fn low_confidence_falls_back_and_rules_override_skips_decide() {
     let mut e = Engine::new(
         registry(),
         Config {
+            default_specialist: "mock-text".into(),
             router: "mock-router".into(),
             ..Default::default()
         },

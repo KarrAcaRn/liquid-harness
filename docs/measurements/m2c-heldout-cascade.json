@@ -1,0 +1,1064 @@
+{
+  "accuracy": 1.0,
+  "cascade_enabled": true,
+  "confusion_matrix": {
+    "lfm3-audio": {
+      "lfm3-audio": 10
+    },
+    "lfm3-speak": {
+      "lfm3-speak": 10
+    },
+    "lfm3-text": {
+      "lfm3-text": 10
+    },
+    "lfm3-vl": {
+      "lfm3-vl": 10
+    }
+  },
+  "confusion_matrix_axes": {
+    "columns": "predicted",
+    "rows": "expected"
+  },
+  "correct": 40,
+  "d1_call_rate": 0.375,
+  "error_count": 0,
+  "errors": [],
+  "file": "/opt/data/home/projects/liquid-harness/.worktrees/t_1045dabc/evals/routing-heldout.jsonl",
+  "latency": {
+    "decision_model": {
+      "count": 15,
+      "p50_ms": 3762,
+      "p95_ms": 5726
+    },
+    "fastpaths": {
+      "count": 25,
+      "p50_ms": 0,
+      "p95_ms": 0
+    },
+    "note": "Nearest-rank milliseconds; total measured with microsecond precision; includes startup/load and all attempted routes.",
+    "total": {
+      "count": 40,
+      "p50_ms": 0.023,
+      "p95_ms": 4356.411
+    }
+  },
+  "loadavg": {
+    "after": "8.76 8.02 6.56 2/2113 1914261",
+    "before": "10.64 8.20 6.53 6/2047 1914090"
+  },
+  "model_calls": 15,
+  "results": [
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9952182554613594,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 5726,
+        "scores": {
+          "lfm3-speak": 0.004781744538640491,
+          "lfm3-text": 0.9952182554613594
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 1
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.8617546585490695,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3291,
+        "scores": {
+          "lfm3-speak": 0.13824534145093045,
+          "lfm3-text": 0.8617546585490695
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 2
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9936849138801254,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3533,
+        "scores": {
+          "lfm3-speak": 0.006315086119874589,
+          "lfm3-text": 0.9936849138801254
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 3
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9916571275503862,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3260,
+        "scores": {
+          "lfm3-speak": 0.008342872449613835,
+          "lfm3-text": 0.9916571275503862
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 4
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "sticky",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-text": 1.0
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "en",
+      "line": 5
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.8334356172487544,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3948,
+        "scores": {
+          "lfm3-speak": 0.16656438275124558,
+          "lfm3-text": 0.8334356172487544
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 6
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.6178710433931897,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4356,
+        "scores": {
+          "lfm3-speak": 0.3821289566068103,
+          "lfm3-text": 0.6178710433931897
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 7
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9921724030874248,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 4750,
+        "scores": {
+          "lfm3-speak": 0.007827596912575112,
+          "lfm3-text": 0.9921724030874248
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 8
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.989568145416424,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3777,
+        "scores": {
+          "lfm3-speak": 0.010431854583575834,
+          "lfm3-text": 0.989568145416424
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 9
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "sticky",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-text": 1.0
+        },
+        "specialist": "lfm3-text",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky"
+        ]
+      },
+      "expected": "lfm3-text",
+      "language": "de",
+      "line": 10
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 11
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 12
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 13
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 14
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "en",
+      "line": 15
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 16
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 17
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 18
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 19
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-vl": 1.0
+        },
+        "specialist": "lfm3-vl",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-vl",
+      "language": "de",
+      "line": 20
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 21
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 22
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 23
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 24
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "en",
+      "line": 25
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 26
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 27
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 28
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 29
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "single-candidate",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-audio": 1.0
+        },
+        "specialist": "lfm3-audio",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate"
+        ]
+      },
+      "expected": "lfm3-audio",
+      "language": "de",
+      "line": 30
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "hint",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-speak": 1.0
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "en",
+      "line": 31
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9914278030389216,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3837,
+        "scores": {
+          "lfm3-speak": 0.9914278030389216,
+          "lfm3-text": 0.008572196961078402
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "en",
+      "line": 32
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9860013447414006,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3803,
+        "scores": {
+          "lfm3-speak": 0.9860013447414006,
+          "lfm3-text": 0.013998655258599344
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "en",
+      "line": 33
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.99150665519975,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3762,
+        "scores": {
+          "lfm3-speak": 0.99150665519975,
+          "lfm3-text": 0.00849334480024994
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "en",
+      "line": 34
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "sticky",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-speak": 1.0
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "en",
+      "line": 35
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9875102223014336,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3291,
+        "scores": {
+          "lfm3-speak": 0.9875102223014336,
+          "lfm3-text": 0.012489777698566434
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "de",
+      "line": 36
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9840620563543044,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3258,
+        "scores": {
+          "lfm3-speak": 0.9840620563543044,
+          "lfm3-text": 0.015937943645695497
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "de",
+      "line": 37
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9892436836091626,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3404,
+        "scores": {
+          "lfm3-speak": 0.9892436836091626,
+          "lfm3-text": 0.010756316390837324
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "de",
+      "line": 38
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 0.9805827652042468,
+        "extras": {},
+        "model_called": true,
+        "reason": "decision-model",
+        "router_ms": 3449,
+        "scores": {
+          "lfm3-speak": 0.9805827652042468,
+          "lfm3-text": 0.019417234795753142
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky",
+          "cache",
+          "model"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "de",
+      "line": 39
+    },
+    {
+      "decision": {
+        "backend": null,
+        "confidence": 1.0,
+        "extras": {},
+        "model_called": false,
+        "reason": "sticky",
+        "router_ms": 0,
+        "scores": {
+          "lfm3-speak": 1.0
+        },
+        "specialist": "lfm3-speak",
+        "stages": [
+          "explicit",
+          "modality",
+          "requires",
+          "single-candidate",
+          "hints",
+          "sticky"
+        ]
+      },
+      "expected": "lfm3-speak",
+      "language": "de",
+      "line": 40
+    }
+  ],
+  "router": "d1",
+  "stage_counts": {
+    "decision-model": 15,
+    "hint": 1,
+    "single-candidate": 20,
+    "sticky": 4
+  },
+  "total": 40
+}
