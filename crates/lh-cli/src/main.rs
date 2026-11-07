@@ -118,7 +118,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Plugins {
             command: Plugins::List,
         } => {
-            let plugins: Vec<_> = registry.plugins.values().map(|entry| json!({"id":entry.manifest.plugin.id,"version":entry.manifest.plugin.version,"provides":entry.manifest.plugin.provides,"manifest":entry.path,"status":if entry.manifest.run.is_some() {"not-started"} else {"declarative"}})).collect();
+            let plugins: Vec<_> = registry.plugins.values().map(|entry| {
+                let plugin = &entry.manifest.plugin;
+                let enabled = config.plugins.get(&plugin.id).and_then(|c| c.enabled).unwrap_or(plugin.enabled);
+                json!({"id":plugin.id,"version":plugin.version,"provides":plugin.provides,"capabilities":plugin.capabilities,"capabilities_source":"manifest","enabled":enabled,"manifest":entry.path,"status":if !enabled {"disabled"} else if entry.manifest.run.is_some() {"not-started"} else {"declarative"}})
+            }).collect();
             println!(
                 "{}",
                 json::to_string_pretty(

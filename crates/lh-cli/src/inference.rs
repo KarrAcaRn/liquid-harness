@@ -37,9 +37,20 @@ pub fn image_url(reference: &str) -> Result<String> {
 }
 
 pub async fn pull(engine: &mut Engine, id: &str) -> Result<Value> {
-    let (backend, key, model, pinned) = if let Some(s) = engine.registry.specialists.get(id) {
-        (s.backend.clone(), s.id.clone(), json!(s.model), false)
-    } else if let Some(r) = engine.registry.routers.get(id) {
+    if engine.registry.specialists.contains_key(id) {
+        let mut decision = engine
+            .route(
+                &RouteInput {
+                    specialist: Some(id.into()),
+                    ..Default::default()
+                },
+                None,
+            )
+            .await?;
+        engine.load_specialist(&mut decision).await?;
+        return Ok(json!({"key":id,"ready":true,"backend":decision.backend}));
+    }
+    let (backend, key, model, pinned) = if let Some(r) = engine.registry.routers.get(id) {
         (
             r.backend.clone().ok_or("router has no backend")?,
             format!("router:{}", r.id),
@@ -49,7 +60,7 @@ pub async fn pull(engine: &mut Engine, id: &str) -> Result<Value> {
     } else {
         return Err(format!("unknown specialist or router '{id}'").into());
     };
-    let host = engine.host(&backend)?;
+    let host = engine.require(&backend, "decide", id).await?;
     let result = host
         .call(
             "backend/load",
@@ -73,7 +84,7 @@ pub async fn run(
         .iter()
         .map(|s| image_url(s))
         .collect::<Result<Vec<_>>>()?;
-    let decision = engine
+    let mut decision = engine
         .route(
             &RouteInput {
                 prompt: prompt.clone(),
@@ -97,8 +108,8 @@ pub async fn run(
         )
         .into());
     }
-    pull(engine, &specialist.id).await?;
-    let host = engine.host(&specialist.backend)?;
+    let host = engine.load_specialist(&mut decision).await?;
+    eprintln!("[route] {}", lh_protocol::json::to_string(&decision)?);
     let content = if images.is_empty() {
         json!(prompt)
     } else {

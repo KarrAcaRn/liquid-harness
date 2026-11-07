@@ -79,7 +79,12 @@ impl Registry {
                 }
             }
             for specialist in &manifest.specialist {
-                validate_model(&specialist.model.source, &path)?;
+                for choice in specialist
+                    .choices()
+                    .map_err(|e| Error::new(-32602, format!("{}: {e}", path.display())))?
+                {
+                    validate_model(&choice.model.source, &path)?;
+                }
                 registry
                     .specialists
                     .insert(specialist.id.clone(), specialist.clone());
@@ -103,7 +108,9 @@ impl Registry {
                 .insert(manifest.plugin.id.clone(), Entry { path, manifest });
         }
         for specialist in registry.specialists.values() {
-            registry.backend(&specialist.backend)?;
+            for choice in specialist.choices().map_err(|e| Error::new(-32602, e))? {
+                registry.backend(&choice.backend)?;
+            }
         }
         for router in registry
             .routers
@@ -139,10 +146,12 @@ impl Registry {
 }
 fn validate_model(source: &str, path: &Path) -> Result<()> {
     let valid = source.strip_prefix("file:").is_some_and(|p| !p.is_empty())
-        || source.strip_prefix("hf:").is_some_and(|p| {
-            p.rsplit_once(':')
-                .is_some_and(|(repo, q)| repo.contains('/') && !q.is_empty())
-        });
+        || source
+            .strip_prefix("hf:")
+            .is_some_and(|p| p.contains('/') && !p.ends_with(':'))
+        || source
+            .strip_prefix("freetoken:")
+            .is_some_and(|p| !p.is_empty());
     if valid {
         Ok(())
     } else {

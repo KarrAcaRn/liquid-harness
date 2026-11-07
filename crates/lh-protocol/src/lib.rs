@@ -6,6 +6,7 @@ pub use serde_json as json;
 use std::collections::BTreeMap;
 pub use toml;
 pub mod chat;
+mod sse;
 pub use chat::*;
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -14,6 +15,9 @@ fn protocol_version() -> u32 {
 }
 fn object() -> Value {
     json::json!({})
+}
+fn enabled() -> bool {
+    true
 }
 fn min_confidence() -> f64 {
     0.55
@@ -44,6 +48,11 @@ pub struct Plugin {
     pub description: String,
     #[serde(default)]
     pub provides: Vec<String>,
+    #[serde(default = "enabled")]
+    pub enabled: bool,
+    /// Discovery hint; initialize is authoritative.
+    #[serde(default)]
+    pub capabilities: Vec<String>,
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -62,10 +71,34 @@ pub struct Specialist {
     pub inputs: Vec<String>,
     #[serde(default)]
     pub outputs: Vec<String>,
-    pub backend: String,
-    pub model: ModelSpec,
+    #[serde(default)]
+    pub backend: Option<String>,
+    #[serde(default)]
+    pub model: Option<ModelSpec>,
+    #[serde(default)]
+    pub backends: Vec<BackendChoice>,
     #[serde(default = "object")]
     pub params: Value,
+}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackendChoice {
+    pub backend: String,
+    pub model: ModelSpec,
+}
+impl Specialist {
+    pub fn choices(&self) -> Result<Vec<BackendChoice>, &'static str> {
+        match (&self.backend, &self.model, self.backends.is_empty()) {
+            (Some(backend), Some(model), true) if !backend.is_empty() => Ok(vec![BackendChoice {
+                backend: backend.clone(),
+                model: model.clone(),
+            }]),
+            (None, None, false) if self.backends.iter().all(|b| !b.backend.is_empty()) => {
+                Ok(self.backends.clone())
+            }
+            _ => Err("specialist needs either backend/model or a nonempty backends list"),
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -113,6 +146,9 @@ pub struct Candidate {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteDecision {
     pub specialist: String,
+    /// None for route-only decisions; set after successful loading.
+    #[serde(default)]
+    pub backend: Option<String>,
     pub confidence: f64,
     #[serde(default)]
     pub scores: BTreeMap<String, f64>,
@@ -364,6 +400,7 @@ mod tests {
         );
         let decision = RouteDecision {
             specialist: "vision".into(),
+            backend: None,
             confidence: 0.9,
             scores: BTreeMap::from([("vision".into(), 0.9)]),
             reason: "test".into(),

@@ -19,6 +19,9 @@ impl Engine {
         }
     }
     pub fn host(&mut self, id: &str) -> Result<Host> {
+        if !self.enabled(id) {
+            return Err(Error::new(-32001, format!("backend '{id}' is disabled")));
+        }
         if let Some(host) = self.hosts.get(id) {
             return Ok(host.clone());
         }
@@ -32,6 +35,87 @@ impl Engine {
         let host = Host::new(entry, config);
         self.hosts.insert(id.into(), host.clone());
         Ok(host)
+    }
+    pub fn enabled(&self, id: &str) -> bool {
+        self.config
+            .plugins
+            .get(id)
+            .and_then(|c| c.enabled)
+            .unwrap_or_else(|| {
+                self.registry
+                    .plugins
+                    .get(id)
+                    .is_some_and(|p| p.manifest.plugin.enabled)
+            })
+    }
+    pub async fn require(&mut self, backend: &str, capability: &str, owner: &str) -> Result<Host> {
+        let host = self.host(backend)?;
+        if !host
+            .capabilities()
+            .await?
+            .as_array()
+            .is_some_and(|a| a.iter().any(|v| v == capability))
+        {
+            return Err(Error::new(
+                -32003,
+                format!("backend '{backend}' does not support {capability} required by '{owner}'"),
+            ));
+        }
+        Ok(host)
+    }
+    /// Resolve preference order at load time, not route-only time. Never retry inference.
+    pub async fn load_specialist(&mut self, decision: &mut RouteDecision) -> Result<Host> {
+        decision.backend = None;
+        let specialist = self
+            .registry
+            .specialists
+            .get(&decision.specialist)
+            .cloned()
+            .ok_or_else(|| Error::new(-32602, "unknown specialist"))?;
+        let mut errors = Vec::new();
+        for choice in specialist.choices().map_err(|e| Error::new(-32602, e))? {
+            let result = async {
+                let host = self
+                    .require(&choice.backend, &specialist.task, &specialist.id)
+                    .await?;
+                let loaded = host
+                    .call(
+                        "backend/load",
+                        json!({"key":specialist.id,"model":choice.model,"pinned":false}),
+                    )
+                    .await?;
+                if loaded["ready"] != true {
+                    return Err(Error::new(-32001, "backend/load did not report ready"));
+                }
+                Ok(host)
+            }
+            .await;
+            match result {
+                Ok(host) => {
+                    eprintln!(
+                        "[route] specialist={} backend={}",
+                        specialist.id, choice.backend
+                    );
+                    decision.backend = Some(choice.backend);
+                    return Ok(host);
+                }
+                Err(error) => {
+                    eprintln!(
+                        "[route] skipping backend={} for {}: {error}",
+                        choice.backend, specialist.id
+                    );
+                    errors.push(format!("{}: {error}", choice.backend));
+                }
+            }
+        }
+        Err(Error::new(
+            -32001,
+            format!(
+                "no backend loaded for '{}': {}",
+                specialist.id,
+                errors.join("; ")
+            ),
+        ))
     }
     pub async fn shutdown(&self) {
         for host in self.hosts.values() {
@@ -129,12 +213,16 @@ impl Engine {
                 },
             )]),
         };
-        let host = self.host(
-            router
-                .backend
-                .as_deref()
-                .ok_or_else(|| Error::new(-32602, "router needs backend"))?,
-        )?;
+        let host = self
+            .require(
+                router
+                    .backend
+                    .as_deref()
+                    .ok_or_else(|| Error::new(-32602, "router needs backend"))?,
+                "decide",
+                &router.id,
+            )
+            .await?;
         // Idempotent load on every use also recovers model state after a plugin restart.
         host.call(
             "backend/load",
@@ -184,6 +272,7 @@ impl Engine {
             .collect();
         Ok(RouteDecision {
             specialist: if low { fallback } else { choice.clone() },
+            backend: None,
             confidence,
             scores: probabilities.clone(),
             reason: if low {
@@ -200,6 +289,7 @@ impl Engine {
 fn decision(id: &str, reason: &str) -> RouteDecision {
     RouteDecision {
         specialist: id.into(),
+        backend: None,
         confidence: 1.0,
         scores: BTreeMap::from([(id.into(), 1.0)]),
         reason: reason.into(),
@@ -221,6 +311,7 @@ pub fn sticky(
 ) -> RouteDecision {
     if !modality_changed && proposed.specialist != previous && proposed.confidence < 0.8 {
         proposed.specialist = previous.into();
+        proposed.backend = None;
         proposed.reason = "sticky".into();
     }
     proposed

@@ -59,6 +59,42 @@ fn failed(o: Output, expected: &str) {
     assert!(String::from_utf8_lossy(&o.stderr).contains(expected));
 }
 #[test]
+fn list_shows_capabilities_and_opt_in_without_starting_backends() {
+    let f = Fixture::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+    let mut command = f.command();
+    command.env("LH_PLUGIN_PATH", &root);
+    let listing = output(command, &["plugins", "list"]);
+    let plugins = listing["plugins"].as_array().unwrap();
+    let ft = plugins.iter().find(|p| p["id"] == "freetoken").unwrap();
+    assert_eq!(ft["status"], "disabled");
+    assert_eq!(ft["capabilities"], json::json!(["chat"]));
+    let llama = plugins.iter().find(|p| p["id"] == "llamacpp").unwrap();
+    assert_eq!(llama["status"], "not-started");
+    assert_eq!(
+        llama["capabilities"],
+        json::json!(["chat", "decide", "stream"])
+    );
+    let config = f.0.join("enabled.toml");
+    std::fs::write(&config, "[plugins.freetoken]\nenabled=true\n").unwrap();
+    let mut command = f.command();
+    command.env("LH_PLUGIN_PATH", root);
+    let listing = output(
+        command,
+        &["--config", config.to_str().unwrap(), "plugins", "list"],
+    );
+    assert_eq!(
+        listing["plugins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["id"] == "freetoken")
+            .unwrap()["status"],
+        "not-started"
+    );
+}
+
+#[test]
 fn run_streams_unicode_and_local_image_and_pull_loads_both_kinds() {
     let f = Fixture::new();
     let image = f.0.join("image.PNG");

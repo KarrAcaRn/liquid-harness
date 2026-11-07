@@ -1,0 +1,19 @@
+[plugin]
+id = "freetoken"
+version = "0.1.0"
+protocol = 1
+description = "FreeToken chat via an existing server or managed ft serve"
+provides = ["backend"]
+capabilities = ["chat"]
+enabled = false
+
+[run]
+command = "lh-backend-freetoken"
+args = []
+
+[config]
+max_resident = 2
+idle_ttl_secs = 600
+load_timeout_secs = 600
+request_timeout_secs = 600
+host_timeout_secs = 660

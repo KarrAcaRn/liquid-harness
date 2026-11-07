@@ -11,8 +11,10 @@ route = "General text conversation, questions, writing, reasoning, coding, plann
 task = "chat"
 inputs = ["text"]
 outputs = ["text", "tool_calls"]
-backend = "llamacpp"
-model = { source = "hf:LiquidAI/LFM3-1.7B-GGUF:Q4_K_M", ctx = 4096, threads = 8 }
+backends = [
+  { backend = "freetoken", model = { source = "hf:LiquidAI/LFM3-1.7B-NVFP4" } },
+  { backend = "llamacpp", model = { source = "hf:LiquidAI/LFM3-1.7B-GGUF:Q4_K_M", ctx = 4096, threads = 8 } },
+]
 params = { temperature = 0.3, top_p = 0.9, max_tokens = 256, chat_template_kwargs = { enable_thinking = false } }
 
 [[specialist]]

@@ -1,5 +1,5 @@
 use super::*;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Read, Write};
 
 fn fake_http(response: String) -> (String, thread::JoinHandle<Value>) {
     fake_http_at(response, "/v1/chat/completions")

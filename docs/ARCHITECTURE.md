@@ -1,6 +1,7 @@
 # liquid-harness – Architecture
 
-Status: M2 implemented (llama.cpp backend, streaming one-shot CLI, routing evaluation).
+Status: M2 and M2b implemented (llama.cpp and opt-in FreeToken backends,
+capability-aware backend fallback, streaming one-shot CLI, routing evaluation).
 Later milestone sections remain the design contract.
 Change it in the same commit when a decision changes.
 
@@ -123,6 +124,37 @@ Rules for manifests:
   `params`; backend-specific configuration validation belongs to that plugin.
 - `model.source` schemes: `hf:<repo>:<quant>` (llama.cpp `-hf` semantics) and `file:<path>`.
 
+M2b adds ordered backend choices. The existing `backend` plus `model` is valid
+shorthand for one choice; use exactly one form (mixed/incomplete forms fail):
+
+```toml
+backends = [
+  { backend = "freetoken", model = { source = "hf:LiquidAI/LFM3-1.7B-NVFP4" } },
+  { backend = "llamacpp", model = { source = "hf:LiquidAI/LFM3-1.7B-GGUF:Q4_K_M", ctx = 4096, threads = 8 } },
+]
+```
+
+FreeToken sources can use `hf:<repo>` without a GGUF quant suffix, `file:<path>`,
+or a `freetoken:<alias>` that maps to a configured endpoint. Its plugin-owned
+`config.models` map is keyed by the exact source and chooses URL or spawn mode.
+Sources/options are backend-specific; the core never translates weights.
+
+`[plugin] enabled` defaults to true; `[plugins.<id>] enabled` in user config
+overrides it. The shipped FreeToken plugin defaults to false and appears only
+in the text specialist's preference chain, so CPU defaults remain unchanged.
+Manifests remain discoverable while disabled, but Engine refuses to start their
+backends. `[plugin] capabilities` is an optional discovery hint displayed by
+`lh plugins list` with `capabilities_source: "manifest"`; listing never starts
+processes or loads models. Runtime capability checks use initialize, not hints.
+
+`Engine::load_specialist` tries the enabled choices in manifest order, checks
+the specialist task capability, and loads its corresponding model. Startup,
+capability and load errors are logged and allow the next choice; exhaustion
+reports all errors. Success sets `RouteDecision.backend` and logs the backend.
+`lh run` and specialist `lh models pull` use this path. Inference errors are
+not retried, preventing duplicate streamed output. `lh route` stays cheap and
+route-only: its `backend` is null, never a prediction claimed as a loaded backend.
+
 ## 4. Protocol (version 1)
 
 Transport: newline-delimited JSON-RPC 2.0. Requests carry integer `id`s.
@@ -145,6 +177,13 @@ Streaming results are sent as notifications before the final response.
 | `$/stream`                   | `{id, delta: {content?, tool_calls?}}` – chunk for request `id` |
 | `$/log`                      | `{level, message}` |
 | `$/progress`                 | `{id, message, fraction?}` – e.g. model download |
+
+Initialize `capabilities` is an array of strings: FreeToken returns `["chat"]`,
+llama.cpp/mock return `["chat", "decide", "stream"]`. The host also accepts the
+legacy boolean map and normalizes true entries. Capabilities are refreshed on
+every process generation. It rejects unsupported chat/decide calls before they
+reach the plugin. A decision-model router checks `decide` before loading; its
+error names both router and backend. FreeToken itself returns -32003 for decide.
 
 M1 transport details:
 - Frames are bounded to 8 MiB including the newline. Invalid envelopes, unknown
@@ -178,7 +217,21 @@ M1 transport details:
 
 ## 5. Routing (the core)
 
-### M2 backend lifecycle
+### M2b FreeToken lifecycle
+
+The separate `lh-backend-freetoken` uses ureq with TLS for remote URL mode and
+loopback HTTP for spawn mode. Bearer tokens come from a named environment
+variable, never TOML. Spawn executes `ft serve --model-path ... --port ...`
+with optional venv/command/environment/extra arguments. Both modes wait for
+`GET /v1/cache/status` with `state=serving`; `/health` is not sufficient.
+LRU/pinning/idle TTL and process-group cleanup follow the llama.cpp design
+below. URL unload only forgets the registration, never stops the remote server.
+The OpenAI SSE decoder is shared in lh-protocol (pure parsing, no HTTP).
+FreeToken supports text chat only, not d1, VL/audio or LFM3 GGUF. Setup,
+limits, CUDA/GPU prerequisites and both config modes: [FreeToken](backends/freetoken.md).
+All FreeToken verification on this host uses fakes; there is no real GPU result.
+
+### llama.cpp lifecycle details
 
 The Linux backend uses `ureq` only for loopback HTTP (TLS features disabled);
 llama.cpp owns Hugging Face downloads and honors `LLAMA_CACHE`. `models_dir`,
@@ -273,6 +326,8 @@ crates/lh-cli         Binary `lh`. M2 adds run, models pull and eval routing. HT
 plugins/backend-llamacpp  Binary `lh-backend-llamacpp`: spawns/stops llama-server per
                       model on a free localhost port, health-waits, LRU/TTL unload,
                       proxies chat (SSE → `$/stream`) and decide (`/v1/systemone`).
+plugins/backend-freetoken Binary `lh-backend-freetoken`: URL or managed ft serve,
+                      readiness, LRU/TTL, chat/SSE only; explicitly opt-in.
 plugins/mock-backend  Deterministic backend (Unicode echo/three stream chunks,
                       decide via case-insensitive word overlap, with normalized scores).
 plugins/mock-pack     Offline text/vision/audio specialists and mock-router fixture.

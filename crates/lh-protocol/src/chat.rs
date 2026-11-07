@@ -1,5 +1,6 @@
 //! OpenAI-compatible chat payloads. Model-specific tool schemas and sampling
 //! parameters stay JSON values; the harness does not rewrite them.
+pub use crate::sse::sse;
 use crate::{json::Value, object};
 use serde::{Deserialize, Serialize};
 

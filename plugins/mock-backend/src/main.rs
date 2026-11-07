@@ -35,11 +35,14 @@ impl Handler for Mock {
             ctx.log("info", "mock backend initialized")
                 .map_err(|e| error(e.to_string()))?;
             return Ok(
-                json!({"name":"mock","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":{"chat":true,"decide":true,"stream":true}}),
+                json!({"name":"mock","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":self.config.get("capabilities").cloned().unwrap_or(json!(["chat","decide","stream"]))}),
             );
         }
         match method {
             "backend/load" => {
+                if self.config["fail_load"] == true {
+                    return Err(RpcError::new(-32001, "configured load failure"));
+                }
                 let key = params["key"].as_str().ok_or_else(|| error("missing key"))?;
                 if !params["model"]["source"].is_string() {
                     return Err(error("missing model.source"));
@@ -53,7 +56,7 @@ impl Handler for Mock {
                 Ok(json!({}))
             }
             "backend/status" => Ok(
-                json!({"loaded":self.loaded.keys().map(|key| json!({"key":key,"pid":std::process::id(),"port":null,"idle_secs":0})).collect::<Vec<_>>(),"pid":std::process::id(),"decide_calls":self.decide_calls,"config":self.config}),
+                json!({"loaded":self.loaded.keys().map(|key| json!({"key":key,"pid":std::process::id(),"port":null,"idle_secs":0})).collect::<Vec<_>>(),"models":self.loaded,"pid":std::process::id(),"decide_calls":self.decide_calls,"config":self.config}),
             ),
             "backend/chat" | "backend/decide" => {
                 let key = params["key"].as_str().ok_or_else(|| error("missing key"))?;

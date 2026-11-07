@@ -56,6 +56,10 @@ impl Host {
         rx.await
             .map_err(|_| Error::new(-32603, "plugin host closed"))?
     }
+    /// Lazily initialize without forwarding a second initialize request.
+    pub async fn capabilities(&self) -> Result<Value> {
+        self.call("host/capabilities", Value::Null).await
+    }
     pub async fn shutdown(&self) {
         let (tx, rx) = oneshot::channel();
         if self.tx.send(CommandMessage::Shutdown(tx)).await.is_ok() {
@@ -64,6 +68,7 @@ impl Host {
     }
 }
 struct Process {
+    capabilities: Vec<String>,
     child: Child,
     stdin: mpsc::Sender<Vec<u8>>,
     frames: mpsc::Receiver<Result<Value>>,
@@ -184,6 +189,7 @@ async fn spawn(entry: &Entry, config: &BTreeMap<String, Value>) -> Result<Proces
         }
     });
     let mut process = Process {
+        capabilities: vec![],
         child,
         stdin,
         frames,
@@ -230,10 +236,28 @@ async fn initialize(
             || !result["name"].is_string()
             || !result["version"].is_string()
             || !result["provides"].is_array()
-            || !result["capabilities"].is_object()
+            || !(result["capabilities"].is_object()
+                || result["capabilities"]
+                    .as_array()
+                    .is_some_and(|a| a.iter().all(Value::is_string)))
         {
             return Err(Error::new(-32603, "invalid initialize handshake"));
         }
+        process.capabilities = if let Some(array) = result["capabilities"].as_array() {
+            array
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        } else {
+            result["capabilities"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .filter(|(_, value)| **value == true)
+                .map(|(name, _)| name.clone())
+                .collect()
+        };
         return Ok(());
     }
 }
@@ -310,6 +334,16 @@ async fn actor(
                                 continue;
                             }
                         }
+                    }
+                    let capabilities = &process.as_ref().unwrap().capabilities;
+                    if method == "host/capabilities" {
+                        let _ = reply.send(Ok(json!(capabilities)));
+                        continue;
+                    }
+                    if let Some(capability) = method.strip_prefix("backend/").filter(|m| matches!(*m, "chat" | "decide"))
+                        && !capabilities.iter().any(|c| c == capability) {
+                        let _ = reply.send(Err(Error::new(-32003, format!("backend '{}' does not support {capability}", entry.manifest.plugin.id))));
+                        continue;
                     }
                     if pending.len() >= 64 {
                         let _ = reply.send(Err(Error::new(-32002, "plugin has too many in-flight calls")));

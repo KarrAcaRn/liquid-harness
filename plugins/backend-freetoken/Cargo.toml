@@ -1,0 +1,16 @@
+[package]
+name = "lh-backend-freetoken"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lh-protocol.workspace = true
+lh-plugin-sdk.workspace = true
+serde.workspace = true
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
+libc = "0.2"
+
+[dev-dependencies]
+toml.workspace = true

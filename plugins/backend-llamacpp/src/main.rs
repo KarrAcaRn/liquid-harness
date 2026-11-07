@@ -8,7 +8,6 @@ use lh_protocol::{
 use std::os::unix::process::CommandExt;
 use std::{
     collections::BTreeMap,
-    io::{BufRead, BufReader, Read},
     net::TcpListener,
     process::{Child, Command, Stdio},
     sync::{Arc, Condvar, Mutex},
@@ -337,7 +336,7 @@ impl Handler for Backend {
             self.models_dir = config["models_dir"].as_str().map(str::to_owned);
             self.initialized = true;
             return Ok(
-                json!({"name":"llamacpp","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":{"chat":true,"decide":true,"stream":true}}),
+                json!({"name":"llamacpp","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":["chat","decide","stream"]}),
             );
         }
         if !self.initialized {
@@ -475,105 +474,7 @@ fn chat(
         json!({"message":choice["message"],"finish_reason":choice["finish_reason"],"usage":value["usage"]}),
     )
 }
-const MAX_RESPONSE: usize = 8 * 1024 * 1024;
-fn sse(
-    reader: impl Read,
-    mut emit: impl FnMut(Value) -> Result<(), RpcError>,
-) -> Result<Value, RpcError> {
-    let mut reader = BufReader::new(reader);
-    let mut line = String::new();
-    let mut event = String::new();
-    let mut message = json!({"role":"assistant","content":null});
-    let mut tools: BTreeMap<u64, Value> = BTreeMap::new();
-    let mut finish = Value::Null;
-    let mut usage = json!({"prompt_tokens":0,"completion_tokens":0,"total_tokens":0});
-    let mut bytes = 0;
-    loop {
-        line.clear();
-        let n = reader
-            .by_ref()
-            .take((MAX_RESPONSE + 1) as u64)
-            .read_line(&mut line)
-            .map_err(failed)?;
-        bytes += n;
-        if bytes > MAX_RESPONSE {
-            return Err(failed("SSE response exceeds size limit"));
-        }
-        if n == 0 {
-            return Err(failed("SSE ended before [DONE]"));
-        }
-        let line = line.trim_end_matches(['\r', '\n']);
-        if let Some(data) = line.strip_prefix("data:") {
-            if !event.is_empty() {
-                event.push('\n');
-            }
-            event.push_str(data.strip_prefix(' ').unwrap_or(data));
-        }
-        if !line.is_empty() || event.is_empty() {
-            continue;
-        }
-        if event == "[DONE]" {
-            break;
-        }
-        let chunk: Value = json::from_str(&event).map_err(failed)?;
-        event.clear();
-        if !chunk["error"].is_null() {
-            return Err(failed(chunk["error"].to_string()));
-        }
-        if chunk["usage"].is_object() {
-            usage = chunk["usage"].clone();
-        }
-        if let Some(choice) = chunk["choices"].as_array().and_then(|a| a.first()) {
-            let delta = &choice["delta"];
-            if delta.is_object() {
-                emit(delta.clone())?;
-                if let Some(role) = delta["role"].as_str() {
-                    message["role"] = json!(role);
-                }
-                for field in ["content", "reasoning_content", "refusal"] {
-                    if let Some(text) = delta[field].as_str() {
-                        append(&mut message[field], text);
-                    }
-                }
-                if let Some(calls) = delta["tool_calls"].as_array() {
-                    for call in calls {
-                        let index = call["index"]
-                            .as_u64()
-                            .ok_or_else(|| failed("tool delta missing index"))?;
-                        let tool = tools.entry(index).or_insert_with(|| json!({"id":"","type":"function","function":{"name":"","arguments":""}}));
-                        for field in ["id", "type"] {
-                            if let Some(s) = call[field].as_str() {
-                                tool[field] = json!(s);
-                            }
-                        }
-                        for field in ["name", "arguments"] {
-                            if let Some(s) = call["function"][field].as_str() {
-                                append(&mut tool["function"][field], s);
-                            }
-                        }
-                    }
-                }
-            }
-            if !choice["finish_reason"].is_null() {
-                finish = choice["finish_reason"].clone();
-            }
-        }
-    }
-    if finish.is_null() {
-        return Err(failed("SSE missing finish reason"));
-    }
-    if !tools.is_empty() {
-        message["tool_calls"] = json!(tools.into_values().collect::<Vec<_>>());
-    }
-    Ok(json!({"message":message,"finish_reason":finish,"usage":usage}))
-}
-fn append(value: &mut Value, text: &str) {
-    if let Value::String(s) = value {
-        s.push_str(text);
-    } else {
-        *value = json!(text);
-    }
-}
+use lh_protocol::chat::sse;
 fn main() -> std::io::Result<()> {
     lh_plugin_sdk::serve(Backend::default())
 }

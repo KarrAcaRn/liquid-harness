@@ -27,6 +27,7 @@ impl Default for Config {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct PluginConfig {
+    pub enabled: Option<bool>,
     pub config: BTreeMap<String, Value>,
 }
 
