@@ -5,6 +5,7 @@ pub use cascade::Session;
 pub use config::CascadeConfig;
 pub mod config;
 pub mod host;
+pub mod lifecycle;
 pub mod registry;
 pub mod router;
 pub mod skills;

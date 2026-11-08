@@ -85,6 +85,26 @@ shuts down. `lh run` supports chat, transcription and speech synthesis.
 Text agent completions cap at 1024 tokens per step (vision at 256), thinking disabled;
 edit specialist `params` for a larger budget. Explicit model selection skips d1.
 
+### Model lifecycle
+
+`lh serve` and `lh chat` load the router (d1) in the background right after
+start, then the specialists listed in `[lifecycle] preload` (`lfm3-text` in
+`examples/lfm3.toml`); everything else loads on first use. The server answers
+immediately; a request that arrives during a load waits for it instead of starting
+a second copy. Models stay resident while their estimated RAM (GGUF + projector +
+KV cache) fits `memory_budget` (default 60 % of available memory at startup);
+beyond that the least recently used specialist is unloaded, never the router.
+A crashed llama-server is restarted by the next request.
+
+```sh
+curl -s localhost:8484/lh/v1/status | jq '.models[] | {id, state, progress, ram_estimate_bytes}'
+```
+
+Streamed chats send `: lh model_loading …` keepalive comments while waiting (and
+`event: model_loading` with `"lh_events": true`); the web UI shows "Loading
+lfm3-vl… 40%". Stopping `lh serve` (Ctrl-C or SIGTERM) stops every llama-server it
+started. Details: [Model lifecycle](docs/ARCHITECTURE.md#model-lifecycle-m5a).
+
 ### Agent tools
 
 The text specialist executes filesystem, shell and web tools in `lh run` and

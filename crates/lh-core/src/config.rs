@@ -42,6 +42,7 @@ pub struct Config {
     pub directory: PathBuf,
     pub server_token_env: Option<String>,
     pub cascade: CascadeConfig,
+    pub lifecycle: crate::lifecycle::LifecycleConfig,
     pub default_specialist: String,
     pub router: String,
     pub plugin_path: Vec<PathBuf>,
@@ -53,6 +54,7 @@ impl Default for Config {
             agent: crate::agent::AgentConfig::default(),
             directory: Self::directory().unwrap_or_else(|_| PathBuf::from(".")),
             cascade: CascadeConfig::default(),
+            lifecycle: crate::lifecycle::LifecycleConfig::default(),
             server_token_env: None,
             default_specialist: "lfm3-text".into(),
             router: "rules".into(),
@@ -100,6 +102,7 @@ impl Config {
         }
         config.directory = directory.clone();
         config.agent.validate()?;
+        config.lifecycle.validate()?;
         Ok((config, directory))
     }
 }

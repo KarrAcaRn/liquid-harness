@@ -1,7 +1,18 @@
 router = "d1"
 default_specialist = "lfm3-text"
+
 plugin_path = ["../plugins/backend-llamacpp", "../plugins/backend-freetoken", "../plugins/lfm3"]
 
 [plugins.llamacpp.config]
 llama_server = "llama-server"
 threads = 8
+
+# Model lifecycle (docs/ARCHITECTURE.md "Model lifecycle"): the router loads in the
+# background at `lh serve`/`lh chat` start, then the preloaded specialists. Other
+# specialists load on demand; residency follows the memory budget (LRU eviction).
+[lifecycle]
+warm_router = true
+preload = ["lfm3-text"]
+memory_budget = "auto"   # 60 % of MemAvailable at startup (cgroup limit respected); "8 GiB", "50%", "unlimited"
+keep_warm = true         # preloaded/default specialist are exempt from the idle TTL (still evictable)
+# max_resident = 4       # optional hard cap on resident models, router included

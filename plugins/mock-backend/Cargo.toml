@@ -7,6 +7,8 @@ edition.workspace = true
 lh-protocol.workspace = true
 lh-plugin-sdk.workspace = true
 base64 = "0.22"
+# Test fixture model processes: own process group and parent-death signal, like llama-server.
+libc = "0.2"
 
 [dev-dependencies]
 lh-core.workspace = true

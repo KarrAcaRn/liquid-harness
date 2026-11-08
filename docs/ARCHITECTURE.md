@@ -75,7 +75,7 @@ args = []
 [config]                        # passed verbatim in `initialize`; user config may override
 llama_server = "llama-server"
 models_dir = "~/.local/share/liquid-harness/models"
-max_resident = 2                # LRU-unload beyond this
+# max_resident = 4              # optional hard cap; the harness memory budget decides (§5 "Model lifecycle")
 idle_ttl_secs = 600
 ```
 
@@ -359,6 +359,77 @@ LFM3 chat disables thinking by default to avoid an invisible reasoning-only
 answer exhausting the completion budget (text agent: 1024 tokens per step;
 vision: 256 tokens, overridable in the pack).
 
+### Model lifecycle (M5a)
+
+`lh-core::lifecycle` tracks every router (`router:<id>`) and specialist in one
+`Lifecycle` shared as `Arc` outside the engine mutex, so status and streams can
+read it while a load or inference holds the engine. States: `stopped | loading
+(progress, eta) | ready | failed (error)`. Backends stay authoritative for
+residency: `Engine::reconcile` compares with `backend/status` and marks models
+that vanished (crash, idle TTL, backend LRU) `stopped` with a reason; a
+suspended llama-server is not counted as ready.
+
+Every task (chat, vision, transcribe, speak, agent, explicit `/v1/decide`) loads
+through one idempotent `Engine::ensure_loaded`/`ensure_router` path that calls
+`backend/load` on every use, so a crashed llama-server is restarted by the next
+request. A fallback chain never overwrites a ready model on another backend
+with a failed attempt; a successful recovery unloads the old copy.
+
+Configuration (`[lifecycle]`, all optional):
+
+```toml
+[lifecycle]
+warm_router = true          # load the router in the background at lh serve/lh chat start
+preload = ["lfm3-text"]     # then these specialists, in order (default: none)
+memory_budget = "auto"      # 60 % of MemAvailable at startup, lowered to the remaining
+                            # cgroup v2 allowance; or bytes, "8 GiB", "50%", "unlimited"
+keep_warm = false           # preloaded + default specialist exempt from the backend idle TTL
+# max_resident = 4          # optional hard cap on resident models, router included
+```
+
+Warm start is non-blocking: the HTTP listener accepts before the router load
+starts. Warm-up takes the engine lock once per target; tokio's mutex is FIFO, so a
+request arriving during the router load waits for that same load (no second
+start) and runs before later preloads. Failures are logged and shown in status.
+
+Residency: each backend may answer `backend/estimate` (llama.cpp: on-disk GGUF +
+projector size, KV cache from GGUF block count/head dims/sliding window for the
+effective ctx, plus a flat 256 MiB compute allowance; not-yet-downloaded models
+have no estimate and count 0 until loaded, when the measured RSS is used). Before
+a load, least-recently-used unpinned models are unloaded until the new estimate
+fits the budget and `max_resident`; keep-warm models go last, the pinned router
+never. The backend `max_resident` setting is now an optional cap (default
+unlimited); the backend idle TTL (600 s) stays, except for keep-warm models.
+
+Visibility: `/lh/v1/status` never waits for the engine. It always contains
+`engine` (`idle|busy`), `warmup {state, pending}`, `budget {memory_budget_bytes,
+source, available_bytes, resident_estimate_bytes, max_resident}` and `models[]`
+(`id, kind, key, backend, state, progress, progress_source (backend |
+previous-load), message, elapsed_ms, eta_ms, error, reason, ram_estimate_bytes,
+rss_bytes, pid, pinned, keep_warm, preload, loads`); process and resident details
+are added when the engine is free. Progress is the backend `$/progress` fraction
+when reported, else elapsed time relative to the previous load of that model in
+this process (capped at 95 %); otherwise only elapsed time.
+
+While a request waits for a load, streams report it every 500 ms: OpenAI chat
+streams always send SSE comments (`: lh model_loading <id> <pct>`, proxy
+keepalive) and, with the harness extension `"lh_events": true`, a named
+`event: model_loading` whose data is the model entry. Agent runs emit a native
+`model_loading` event (`{event, data, run_id}`). A streamed chat arriving while
+the engine is busy gets its headers at once (no `x-lh-route` header then; the
+route is in the stream's model field as usual). Non-streaming chat and agent
+runs wait instead of answering 409 while the engine is busy loading or warming;
+an agent holding the engine (e.g. awaiting approval) still yields 409 for new
+runs and for management endpoints other than status. `lh chat` warms up while
+the user types and prints one-line `lh: loading <id> (<backend>)…` / `lh: <id>
+ready (N s)` notes on stderr. The web UI requests `lh_events`, shows "Loading
+<id>… N%" in the pending answer and the run status, and lists model states,
+RAM estimates and the budget on the Status page.
+
+Shutdown: SIGINT or SIGTERM stop accepting, abort warm-up and streams and shut
+the engine down; backends kill each model's process group (verified with the
+real binary and mock model processes in `crates/lh-cli/tests/lifecycle.rs`).
+
 ### M3a audio execution
 
 `task_method` maps chat/decide/transcribe/speak to the corresponding backend method;
@@ -531,9 +602,10 @@ HTTP conversations are stateless: clients supply history. One engine/cache is
 shared, and a mutex serializes complete inference calls so backend broadcast
 streams cannot contaminate other clients. SSE sends live delta frames followed
 by a finish chunk and `[DONE]`, including draining queued final deltas. Routing
-is resolved before streaming headers, then the selected specialist is pinned
+is resolved before streaming headers when the engine is free (see "Model
+lifecycle" for the busy case), then the selected specialist is pinned
 for execution (no second model decision). In-stream failures are error events.
-A disconnected client does not cancel the serial backend handler. Ctrl-C stops
+A disconnected client does not cancel the serial backend handler. SIGINT/SIGTERM stop
 accepting, drains connections briefly, aborts pending HTTP work and shuts down
 the engine. No cancellation/replay promise is added to the SDK.
 

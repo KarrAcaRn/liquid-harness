@@ -41,27 +41,11 @@ pub async fn pull(engine: &mut Engine, id: &str) -> Result<Value> {
         let decision = engine.prepare(id).await?;
         return Ok(json!({"key":id,"ready":true,"backend":decision.backend}));
     }
-    let (backend, key, model, pinned) = if let Some(r) = engine.registry.routers.get(id) {
-        (
-            r.backend.clone().ok_or("router has no backend")?,
-            format!("router:{}", r.id),
-            json!(r.model.as_ref().ok_or("router has no model")?),
-            true,
-        )
-    } else {
+    let Some(router) = engine.registry.routers.get(id).cloned() else {
         return Err(format!("unknown specialist or router '{id}'").into());
     };
-    let host = engine.require(&backend, "decide", id).await?;
-    let result = host
-        .call(
-            "backend/load",
-            json!({"key":key,"model":model,"pinned":pinned}),
-        )
-        .await?;
-    if result["ready"] != true {
-        return Err("backend/load did not report ready".into());
-    }
-    Ok(result)
+    engine.ensure_router(&router).await?;
+    Ok(json!({"key":format!("router:{}", router.id),"ready":true,"backend":router.backend}))
 }
 
 pub(crate) fn audio_url(reference: &str) -> Result<String> {

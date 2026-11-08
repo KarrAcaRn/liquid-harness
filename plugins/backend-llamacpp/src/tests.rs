@@ -184,6 +184,7 @@ pub(super) fn resident(pinned: bool, age: u64) -> Resident {
         model: spec("file:/fake"),
         port: 1,
         pinned,
+        keep_warm: false,
         used: Instant::now() - Duration::from_secs(age),
     }
 }

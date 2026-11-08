@@ -8,6 +8,23 @@ use std::collections::BTreeMap;
 pub(super) type Runs = Arc<Mutex<BTreeMap<String, Arc<Control>>>>;
 
 pub(super) async fn management(state: &State, path: &str) -> ApiResult<Reply> {
+    // Status never waits for the engine: model states come from the shared
+    // lifecycle tracker, process details only when the engine is free.
+    if path == "/lh/v1/status" {
+        let mut value = match state.engine.try_lock() {
+            Ok(mut engine) => {
+                engine.reconcile().await;
+                json!({"engine":"idle","processes":engine.process_status().await,"resident_models":engine.resident_models().await,"cascade":engine.routing_stats()})
+            }
+            Err(_) => json!({"engine":"busy"}),
+        };
+        if let (Some(target), Value::Object(lifecycle)) =
+            (value.as_object_mut(), state.lifecycle.snapshot())
+        {
+            target.extend(lifecycle);
+        }
+        return Ok(json_response(value));
+    }
     // A running agent holds the engine lock. Fail promptly rather than deadlock
     // clients trying to inspect status while an approval is pending.
     let mut engine = state
@@ -30,9 +47,6 @@ pub(super) async fn management(state: &State, path: &str) -> ApiResult<Reply> {
         }
         "/lh/v1/skills" => {
             json!({"skills":agent::skill_registry(&engine).map_err(backend)?.values().map(|s|json!({"name":s.name,"description":s.description,"tools":s.tools})).collect::<Vec<_>>()})
-        }
-        "/lh/v1/status" => {
-            json!({"processes":engine.process_status().await,"resident_models":engine.resident_models().await,"cascade":engine.routing_stats()})
         }
         _ if path.starts_with("/lh/v1/skills/") => {
             let name = path.trim_start_matches("/lh/v1/skills/");
@@ -98,18 +112,21 @@ pub(super) async fn start(state: State, value: Value) -> ApiResult<Reply> {
     {
         return Err(bad("agent request accepts only model and messages"));
     }
-    let mut engine = state
-        .engine
-        .clone()
-        .try_lock_owned()
-        .map_err(|_| (StatusCode::CONFLICT, "engine busy".into()))?;
+    // An agent (possibly awaiting approval) holding the engine is a conflict;
+    // warm-up or another request's model load is a wait, reported as loading.
+    let mut engine = match state.engine.clone().try_lock_owned() {
+        Ok(engine) => engine,
+        Err(_) if state.lifecycle.warming() || state.lifecycle.any_loading() => {
+            state.engine.clone().lock_owned().await
+        }
+        Err(_) => return Err((StatusCode::CONFLICT, "engine busy".into())),
+    };
     let input = crate::conversation::routing_input(&engine, &messages, &model);
     let mut route = engine.route(&input, None).await.map_err(bad)?;
     let specialist = &engine.registry.specialists[&route.specialist];
     if specialist.task != "chat" || !(specialist.agent || !specialist.tools.is_empty()) {
         return Err(bad("selected specialist is not an agent"));
     }
-    engine.load_specialist(&mut route).await.map_err(backend)?;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let id = format!(
         "run-{}-{}",
@@ -121,6 +138,33 @@ pub(super) async fn start(state: State, value: Value) -> ApiResult<Reply> {
     let (out, incoming) = mpsc::channel::<Bytes>(16);
     let response_id = id.clone();
     let worker = tokio::spawn(async move {
+        // Load inside the stream so the client sees `model_loading` events.
+        let mut feed = super::loading::Feed::new(state.lifecycle.clone());
+        let style = super::loading::Style::Agent { run_id: &id };
+        let loaded = {
+            let load = engine.load_specialist(&mut route);
+            tokio::pin!(load);
+            loop {
+                tokio::select! {
+                    result = &mut load => break result,
+                    _ = feed.tick() => for frame in feed.frames(style) {
+                        let _ = out.send(frame).await;
+                    },
+                }
+            }
+        };
+        if let Err(error) = loaded {
+            let event = json!({"event":"error","data":{"message":error.to_string()},"run_id":id});
+            let _ = out
+                .send(Bytes::from(format!("event: error\ndata: {event}\n\n")))
+                .await;
+            let event = json!({"event":"done","data":{"error":error.to_string()},"run_id":id});
+            let _ = out
+                .send(Bytes::from(format!("event: done\ndata: {event}\n\n")))
+                .await;
+            state.runs.lock().await.remove(&id);
+            return;
+        }
         let (tx, mut rx) = mpsc::unbounded_channel();
         let run = agent::run(
             &mut engine,

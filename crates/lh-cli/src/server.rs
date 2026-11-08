@@ -2,6 +2,7 @@
 //! backend broadcast notifications isolated between concurrent HTTP clients.
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 mod agent_api;
+mod loading;
 #[cfg(feature = "web")]
 mod web;
 use bytes::Bytes;
@@ -37,6 +38,8 @@ const MAX_BODY: usize = 6 * 1024 * 1024;
 struct State {
     runs: agent_api::Runs,
     engine: Arc<Mutex<Engine>>,
+    /// Model states, readable while the engine is busy.
+    lifecycle: Arc<lh_core::lifecycle::Lifecycle>,
     token: Option<String>,
     streams: Arc<std::sync::Mutex<Vec<tokio::task::AbortHandle>>>,
 }
@@ -169,11 +172,17 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
         .map(|v| v.as_bool().ok_or_else(|| bad("stream must be boolean")))
         .transpose()?
         .unwrap_or(false);
+    // Harness extension: named `model_loading` events in the OpenAI stream.
+    let lh_events = value
+        .get("lh_events")
+        .map(|v| v.as_bool().ok_or_else(|| bad("lh_events must be boolean")))
+        .transpose()?
+        .unwrap_or(false);
     let mut params = value
         .as_object()
         .cloned()
         .ok_or_else(|| bad("object required"))?;
-    for name in ["messages", "model", "stream"] {
+    for name in ["messages", "model", "stream", "lh_events"] {
         params.remove(name);
     }
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -182,8 +191,8 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
         created(),
         NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     );
-    let mut engine = state.engine.clone().lock_owned().await;
     if !streaming {
+        let mut engine = state.engine.clone().lock_owned().await;
         let (route, response) =
             crate::conversation::complete(&mut engine, messages, &model, None, json!(params), None)
                 .await
@@ -197,14 +206,53 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
             &route,
         ));
     }
-    // Resolve before sending headers. Pin the chosen specialist for complete so
-    // inference cannot disagree with the route advertised on the response.
-    let input = crate::conversation::routing_input(&engine, &messages, &model);
-    let route = engine.route(&input, None).await.map_err(bad)?;
-    let selected = route.specialist.clone();
-    let stream_route = route.clone();
+    // When the engine is free, resolve the route before sending headers (the
+    // route header and HTTP errors stay exact). When it is busy (warm-up,
+    // another request's model load), send headers at once and report the
+    // wait in the stream instead of hanging silently.
+    let ready = match state.engine.clone().try_lock_owned() {
+        Ok(mut engine) => {
+            let input = crate::conversation::routing_input(&engine, &messages, &model);
+            let route = engine.route(&input, None).await.map_err(bad)?;
+            Some((engine, route))
+        }
+        Err(_) => None,
+    };
+    let header_route = ready.as_ref().map(|(_, route)| route.clone());
+    let style = loading::Style::Chat { events: lh_events };
     let (out, incoming) = mpsc::channel::<Bytes>(16);
+    let lifecycle = state.lifecycle.clone();
+    let engine_lock = state.engine.clone();
     let worker = tokio::spawn(async move {
+        let mut feed = loading::Feed::new(lifecycle);
+        let (mut engine, route) = match ready {
+            Some(ready) => ready,
+            None => {
+                let lock = engine_lock.lock_owned();
+                tokio::pin!(lock);
+                let mut engine = loop {
+                    tokio::select! {
+                        engine = &mut lock => break engine,
+                        _ = feed.tick() => for frame in feed.frames(style) {
+                            let _ = out.send(frame).await;
+                        },
+                    }
+                };
+                let input = crate::conversation::routing_input(&engine, &messages, &model);
+                match engine.route(&input, None).await {
+                    Ok(route) => (engine, route),
+                    Err(error) => {
+                        let event = json!({"error":{"message":error.to_string(),"type":"invalid_request_error"}});
+                        let _ = out
+                            .send(Bytes::from(format!("data: {event}\n\ndata: [DONE]\n\n")))
+                            .await;
+                        return;
+                    }
+                }
+            }
+        };
+        let selected = route.specialist.clone();
+        let stream_route = route;
         let route_chunk = |delta, finish| {
             let mut value = chunk(&id, &selected, delta, finish);
             value["lh"] = json!(stream_route);
@@ -230,6 +278,9 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
                     let _ = out.send(Bytes::from(frame)).await;
                 },
                 result = &mut inference => break result,
+                _ = feed.tick() => for frame in feed.frames(style) {
+                    let _ = out.send(frame).await;
+                },
             }
         };
         while let Ok(delta) = rx.try_recv() {
@@ -271,7 +322,10 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
         .header("x-accel-buffering", "no")
         .body(StreamBody::new(frames).boxed_unsync())
         .unwrap();
-    Ok(routed(reply, &route))
+    Ok(match header_route {
+        Some(route) => routed(reply, &route),
+        None => reply,
+    })
 }
 async fn task(
     engine: &mut Engine,
@@ -484,24 +538,12 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
                 .unwrap_or(&engine.config.router)
                 .to_owned();
             if let Some(router) = engine.registry.routers.get(&id).cloned() {
-                let backend_id = router
-                    .backend
-                    .as_deref()
-                    .ok_or_else(|| bad("router has no decision backend"))?;
-                let model = router
-                    .model
-                    .ok_or_else(|| bad("router has no decision model"))?;
+                if router.model.is_none() {
+                    return Err(bad("router has no decision model"));
+                }
                 let key = format!("router:{id}");
-                let host = engine
-                    .require(backend_id, "decide", &id)
-                    .await
-                    .map_err(backend)?;
-                host.call(
-                    "backend/load",
-                    json!({"key":key,"model":model,"pinned":true}),
-                )
-                .await
-                .map_err(backend)?;
+                let host = engine.ensure_router(&router).await.map_err(backend)?;
+                engine.lifecycle.touch(&key);
                 params["key"] = json!(key);
                 let response = host.call("backend/decide", params).await.map_err(backend)?;
                 let mut reply = json_response(response);
@@ -567,14 +609,55 @@ pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error:
         .transpose()?;
     let listener = TcpListener::bind(bind).await?;
     eprintln!("lh server listening on {}", listener.local_addr()?);
+    let targets = engine.warm_targets();
     let state = State {
         runs: Arc::new(Mutex::new(Default::default())),
+        lifecycle: engine.lifecycle.clone(),
         engine: Arc::new(Mutex::new(engine)),
         token,
         streams: Arc::new(std::sync::Mutex::new(Vec::new())),
     };
+    // Warm start in the background: the listener is already accepting. One
+    // engine lock per target, so a request queued behind the router load runs
+    // before preloads (tokio's mutex is FIFO) and waits for, never repeats, a load.
+    if !targets.is_empty() {
+        let labels = |targets: &[lh_core::lifecycle::WarmTarget]| {
+            targets.iter().map(|t| t.label()).collect::<Vec<_>>()
+        };
+        state.lifecycle.set_warmup("running", labels(&targets));
+        let (engine, lifecycle) = (state.engine.clone(), state.lifecycle.clone());
+        let warmup = tokio::spawn(async move {
+            for (index, target) in targets.iter().enumerate() {
+                lifecycle.set_warmup("running", labels(&targets[index..]));
+                let started = std::time::Instant::now();
+                let result = engine.lock().await.warm(target).await;
+                match result {
+                    Ok(()) => eprintln!(
+                        "lh: warm-up {} ready after {:.1} s",
+                        target.label(),
+                        started.elapsed().as_secs_f64()
+                    ),
+                    Err(error) => eprintln!("lh: warm-up of {} failed: {error}", target.label()),
+                }
+            }
+            lifecycle.set_warmup("done", vec![]);
+        });
+        state.streams.lock().unwrap().push(warmup.abort_handle());
+    }
     let mut connections = JoinSet::new();
-    let shutdown = tokio::signal::ctrl_c();
+    let shutdown = async {
+        #[cfg(unix)]
+        {
+            let mut terminate =
+                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+            tokio::select! {
+                signal = tokio::signal::ctrl_c() => signal,
+                _ = terminate.recv() => Ok(()),
+            }
+        }
+        #[cfg(not(unix))]
+        tokio::signal::ctrl_c().await
+    };
     tokio::pin!(shutdown);
     let outcome = loop {
         tokio::select! {

@@ -6,7 +6,8 @@ use lh_protocol::{
     Answer, DecideRequest, DecideResponse, Question, RouteDecision, RouteInput, Specialist,
     json::{self, json},
 };
-use std::{collections::BTreeMap, time::Instant};
+use std::{collections::BTreeMap, sync::Arc, time::Instant};
+mod lifecycle_ops;
 
 /// Explicit task mapping; arbitrary task names cannot become RPC methods.
 pub fn task_method(task: &str) -> Result<&'static str> {
@@ -24,6 +25,8 @@ pub fn task_method(task: &str) -> Result<&'static str> {
 pub struct Engine {
     pub registry: Registry,
     pub config: Config,
+    /// Shared model states; readable without holding the engine.
+    pub lifecycle: Arc<crate::lifecycle::Lifecycle>,
     hosts: BTreeMap<String, Host>,
     cache: RouteCache,
     model_calls: u64,
@@ -81,10 +84,25 @@ impl Engine {
         {
             return Err(Error::new(-32602, "backend is not a specialist choice"));
         }
+        self.lifecycle.touch(&specialist.id);
         self.host(backend)?.call(method, params).await
     }
     pub fn new(registry: Registry, config: Config) -> Self {
+        let budget = crate::lifecycle::Budget::resolve(&config.lifecycle);
+        Self::with_budget(registry, config, budget)
+    }
+    /// Like `new`, with an explicit memory budget (tests, embedding).
+    pub fn with_budget(
+        registry: Registry,
+        config: Config,
+        budget: crate::lifecycle::Budget,
+    ) -> Self {
         Self {
+            lifecycle: Arc::new(crate::lifecycle::Lifecycle::new(
+                &registry,
+                &config.lifecycle,
+                budget,
+            )),
             registry,
             config,
             hosts: BTreeMap::new(),
@@ -209,16 +227,9 @@ impl Engine {
                 let host = self
                     .require(&choice.backend, &specialist.task, &specialist.id)
                     .await?;
-                let loaded = host
-                    .call(
-                        "backend/load",
-                        json!({"key":specialist.id,"model":choice.model,"pinned":false}),
-                    )
+                self.ensure_loaded(&host, &choice.backend, &specialist.id, &choice.model, false)
                     .await?;
-                if loaded["ready"] != true {
-                    return Err(Error::new(-32001, "backend/load did not report ready"));
-                }
-                Ok(host)
+                Ok::<_, Error>(host)
             }
             .await;
             match result {
@@ -487,22 +498,9 @@ impl Engine {
                 },
             )]),
         };
-        let host = self
-            .require(
-                router
-                    .backend
-                    .as_deref()
-                    .ok_or_else(|| Error::new(-32602, "router needs backend"))?,
-                "decide",
-                &router.id,
-            )
-            .await?;
         // Idempotent load on every use also recovers model state after a plugin restart.
-        host.call(
-            "backend/load",
-            json!({"key":request.key,"model":router.model,"pinned":true}),
-        )
-        .await?;
+        let host = self.ensure_router(&router).await?;
+        self.lifecycle.touch(&request.key);
         self.model_calls += 1;
         let response: DecideResponse = json::from_value(
             host.call("backend/decide", json::to_value(request)?)

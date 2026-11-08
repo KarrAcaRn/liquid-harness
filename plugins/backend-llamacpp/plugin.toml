@@ -12,7 +12,7 @@ args = []
 
 [config]
 llama_server = "llama-server"
-max_resident = 2
+# max_resident = 4            # optional hard cap; residency follows [lifecycle] memory_budget
 idle_ttl_secs = 600
 load_timeout_secs = 600
 request_timeout_secs = 600

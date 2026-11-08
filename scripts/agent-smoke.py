@@ -156,7 +156,12 @@ params={{temperature=0.1,top_k=50,repeat_penalty=1.1,max_tokens=512,chat_templat
                 record['events'].append(event)
                 print(json.dumps(event), flush=True)
                 if event['event'] == 'approval_required':
-                    assert call(address, 'GET', '/lh/v1/status')[0] == 409
+                    # Status stays readable while the agent holds the engine;
+                    # other management endpoints still answer 409.
+                    status, busy = call(address, 'GET', '/lh/v1/status')
+                    assert status == 200 and busy['engine'] == 'busy', (status, busy)
+                    assert any(m['state'] == 'ready' for m in busy['models']), busy
+                    assert call(address, 'GET', '/lh/v1/plugins')[0] == 409
                     if answer == 'cancel':
                         assert call(address, 'POST', f'/lh/v1/agent/runs/{run_id}/cancel', {})[0] == 200
                     elif answer != 'timeout':

@@ -2,6 +2,7 @@
 //! the TTL worker can never evict a model during loading or inference.
 use lh_plugin_sdk::{Context, Handler};
 mod audio;
+mod estimate;
 use lh_protocol::{
     ModelSpec, RpcError,
     json::{self, Value, json},
@@ -42,7 +43,16 @@ struct Resident {
     model: ModelSpec,
     port: u16,
     pinned: bool,
+    /// Exempt from the idle TTL (lh `lifecycle.keep_warm`), still evictable.
+    keep_warm: bool,
     used: Instant,
+}
+/// Resident set size of a model server and its process group leader, if readable.
+fn rss_bytes(pid: u32) -> Option<u64> {
+    let statm = std::fs::read_to_string(format!("/proc/{pid}/statm")).ok()?;
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    Some(pages * u64::try_from(page).ok()?)
 }
 struct State {
     models: BTreeMap<String, Resident>,
@@ -56,7 +66,7 @@ impl State {
                 .process
                 .as_mut()
                 .is_none_or(|p| matches!(p.0.try_wait(), Ok(None)));
-            alive && (r.pinned || r.used.elapsed() < self.ttl)
+            alive && (r.pinned || r.keep_warm || r.used.elapsed() < self.ttl)
         });
     }
     fn room(&mut self, limit: usize) -> Result<(), RpcError> {
@@ -119,7 +129,7 @@ impl Default for Backend {
             ffmpeg: "ffmpeg".into(),
             request_timeout: Duration::from_secs(600),
             models_dir: None,
-            limit: 2,
+            limit: usize::MAX,
             load_timeout: Duration::from_secs(600),
             agent: agent(600),
             initialized: false,
@@ -334,7 +344,14 @@ impl Handler for Backend {
                     return Err(invalid(format!("{key} must be a nonempty string")));
                 }
             }
-            self.limit = usize::try_from(positive(&config, "max_resident", 2)?).map_err(invalid)?;
+            // Optional hard cap; residency is otherwise governed by the
+            // harness memory budget (docs/ARCHITECTURE.md "Model lifecycle").
+            self.limit = match config.get("max_resident") {
+                None => usize::MAX,
+                Some(_) => {
+                    usize::try_from(positive(&config, "max_resident", 1)?).map_err(invalid)?
+                }
+            };
             for (i, key) in ["ctx", "batch", "threads"].iter().enumerate() {
                 self.defaults[i] = u32::try_from(positive(&config, key, self.defaults[i] as u64)?)
                     .map_err(invalid)?;
@@ -362,9 +379,17 @@ impl Handler for Backend {
         }
         state.reap();
         if method == "backend/status" {
-            return Ok(
-                json!({"loaded":state.models.iter().map(|(key,r)| json!({"key":key,"pid":r.process.as_ref().map(|p|p.0.id()),"port":r.process.as_ref().map(|_|r.port),"idle_secs":r.used.elapsed().as_secs(),"pinned":r.pinned})).collect::<Vec<_>>()}),
-            );
+            return Ok(json!({"loaded":state.models.iter().map(|(key,r)| {
+                    let pid = r.process.as_ref().map(|p| p.0.id());
+                    json!({"key":key,"pid":pid,"port":r.process.as_ref().map(|_|r.port),"idle_secs":r.used.elapsed().as_secs(),"pinned":r.pinned,"keep_warm":r.keep_warm,"suspended":r.process.is_none(),"rss_bytes":pid.and_then(rss_bytes)})
+                }).collect::<Vec<_>>()}));
+        }
+        if method == "backend/estimate" {
+            let mut model: ModelSpec =
+                json::from_value(params["model"].clone()).map_err(invalid)?;
+            model.ctx.get_or_insert(self.defaults[0]);
+            model.batch.get_or_insert(self.defaults[1]);
+            return Ok(estimate::estimate(&model, self.models_dir.as_deref()));
         }
         if ![
             "backend/load",
@@ -398,6 +423,12 @@ impl Handler for Backend {
                     .as_bool()
                     .ok_or_else(|| invalid("pinned must be boolean"))?,
             };
+            let keep_warm = match params.get("keep_warm") {
+                None => false,
+                Some(v) => v
+                    .as_bool()
+                    .ok_or_else(|| invalid("keep_warm must be boolean"))?,
+            };
             let listener = TcpListener::bind("127.0.0.1:0").map_err(failed)?;
             let port = listener.local_addr().map_err(failed)?.port();
             let args = arguments(&model, port)?;
@@ -407,17 +438,20 @@ impl Handler for Backend {
                         "key already loaded with a different model; unload first",
                     ));
                 }
-                if pinned && r.process.is_none() {
+                // A suspended server (stopped for TTS) is restarted here, with
+                // progress, so the harness reports the reload as loading.
+                if r.process.is_none() {
                     drop(listener);
                     let mut process = spawn(&self.executable, &args, self.models_dir.as_deref())?;
                     ready(&mut process, port, self.load_timeout, || {
-                        ctx.progress("Reloading suspended model for pinning", None)
+                        ctx.progress("Reloading suspended model", None)
                             .map_err(internal)
                     })?;
                     r.port = port;
                     r.process = Some(process);
                 }
                 r.pinned |= pinned;
+                r.keep_warm |= keep_warm;
                 r.used = Instant::now();
                 return Ok(
                     json!({"key":key,"ready":true,"info":{"pid":r.process.as_ref().map(|p|p.0.id()),"port":r.process.as_ref().map(|_|r.port)}}),
@@ -439,6 +473,7 @@ impl Handler for Backend {
                     model,
                     port,
                     pinned,
+                    keep_warm,
                     used: Instant::now(),
                 },
             );

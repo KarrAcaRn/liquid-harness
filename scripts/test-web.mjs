@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
@@ -25,6 +25,17 @@ for (let size = 1; size <= bytes.length; size++) {
   assert.deepEqual(events,[{event:'delta',data:'{"content":"Grüße 😀"}'},{event:'message',data:'a\nb'},{event:'message',data:'[DONE]'}]);
 }
 assert.equal(requestBody({hello:'世界'}),'{"hello":"世界"}');
+// Model lifecycle: loading events and status entries.
+assert.equal(loadingLabel({specialist:'lfm3-text'}),'Loading lfm3-text…');
+assert.equal(loadingLabel({specialist:'lfm3-text',progress:0.424,eta_ms:2100}),'Loading lfm3-text… 42% ~3 s left');
+assert.equal(loadingLabel({id:'x',progress:7}),'Loading x… 100%');
+assert.equal(modelStateLabel({state:'loading',progress:0.5}),'Loading… 50%');
+assert.equal(modelStateLabel({state:'ready'}),'Ready');
+assert.equal(modelStateLabel({state:'failed'}),'Failed');
+assert.equal(modelStateLabel({}),'Stopped');
+assert.equal(formatBytes(512),'512 B');
+assert.equal(formatBytes(1536*1024*1024),'1.5 GiB');
+assert.equal(formatBytes(null),'unknown');
 assert.throws(()=>requestBody({s:'a'.repeat(MAX_BODY)}),/6 MiB/);
 // Ctrl+Enter submits through the form exactly once; other keys keep their default.
 const key = init => { const e = {key:'Enter',ctrlKey:false,altKey:false,metaKey:false,shiftKey:false,isComposing:false,repeat:false,prevented:false,...init}; e.preventDefault = () => { e.prevented = true; }; return e; };

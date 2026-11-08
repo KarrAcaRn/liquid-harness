@@ -44,16 +44,74 @@ pub async fn run(engine: &mut Engine, mut model: String) -> Result<()> {
     let mut speak = false;
     let mut last: Option<RouteDecision> = None;
     let interactive = io::stdin().is_terminal();
-    // Reading a line is intentionally blocking only while no inference is active.
-    loop {
+    // During the router/preload warm-up the first line is read on a thread,
+    // so loading runs while the user types; the first turn waits for (never
+    // repeats) a running load. Later lines are read directly: approval
+    // prompts read the tty and must not race a background reader.
+    let mut early: Option<Option<io::Result<String>>> = None;
+    let mut prompted = false;
+    let targets = engine.warm_targets();
+    if !targets.is_empty() {
+        let (first_tx, first_rx) = tokio::sync::oneshot::channel::<Option<io::Result<String>>>();
+        std::thread::spawn(move || {
+            let mut line = String::new();
+            let _ = first_tx.send(match io::stdin().lock().read_line(&mut line) {
+                Ok(0) => None,
+                Ok(_) => Some(Ok(line)),
+                Err(e) => Some(Err(e)),
+            });
+        });
+        let labels: Vec<String> = targets.iter().map(|t| t.label()).collect();
+        eprintln!("lh: warming up {} in the background", labels.join(", "));
         if interactive {
             print!("lh> ");
             io::stdout().flush()?;
+            prompted = true;
         }
-        let mut line = String::new();
-        if io::stdin().lock().read_line(&mut line)? == 0 {
-            break;
+        let mut warm = Box::pin(engine.warm_all());
+        let mut first_rx = Box::pin(first_rx);
+        let first = tokio::select! {
+            _ = &mut warm => None,
+            line = &mut first_rx => Some(line.unwrap_or(None)),
+        };
+        let line = match first {
+            Some(line) => {
+                let quit = match &line {
+                    None => true,
+                    Some(Ok(text)) => matches!(parse(text), Ok(Command::Quit)),
+                    Some(Err(_)) => false,
+                };
+                // Quitting cancels the load; anything else waits for it.
+                if !quit {
+                    warm.await;
+                }
+                line
+            }
+            None => {
+                drop(warm);
+                first_rx.await.unwrap_or(None)
+            }
+        };
+        early = Some(line);
+    }
+    loop {
+        if interactive && !std::mem::take(&mut prompted) {
+            print!("lh> ");
+            io::stdout().flush()?;
         }
+        let line = match early.take() {
+            Some(line) => line,
+            None => {
+                let mut line = String::new();
+                match io::stdin().lock().read_line(&mut line) {
+                    Ok(0) => None,
+                    Ok(_) => Some(Ok(line)),
+                    Err(e) => Some(Err(e)),
+                }
+            }
+        };
+        let Some(line) = line else { break };
+        let line = line?;
         let command = match parse(&line) {
             Ok(c) => c,
             Err(e) => {

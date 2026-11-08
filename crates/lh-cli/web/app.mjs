@@ -72,6 +72,27 @@ export function speakOptions(available, choice) {
 }
 // Option value → setting: '' ("<none>") and anything that is not a nonempty string → null.
 export function speakChoiceFromValue(value) { return typeof value === 'string' && value ? value : null; }
+// Model lifecycle (docs/ARCHITECTURE.md "Model lifecycle"): `model_loading`
+// stream events and `/lh/v1/status` entries share these fields.
+export function loadingLabel(model) {
+  const name = model?.specialist || model?.id || 'model';
+  const parts = [`Loading ${name}…`];
+  if (typeof model?.progress === 'number' && Number.isFinite(model.progress)) parts.push(`${Math.round(Math.min(1, Math.max(0, model.progress)) * 100)}%`);
+  if (typeof model?.eta_ms === 'number' && model.eta_ms > 0) parts.push(`~${Math.ceil(model.eta_ms / 1000)} s left`);
+  return parts.join(' ');
+}
+export function formatBytes(bytes) {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return 'unknown';
+  const units = ['B','KiB','MiB','GiB','TiB']; let value = bytes, unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  return `${unit ? value.toFixed(1) : value} ${units[unit]}`;
+}
+export function modelStateLabel(model) {
+  if (model?.state === 'loading') return loadingLabel(model).replace(/^Loading [^…]*…/, 'Loading…');
+  if (model?.state === 'failed') return 'Failed';
+  if (model?.state === 'ready') return 'Ready';
+  return 'Stopped';
+}
 // Handles UTF-8 split across chunks, CR/LF/CRLF, comments and multiline data.
 export async function readSSE(body, onEvent) {
   if (!body) throw new Error('The server returned no stream.');
@@ -200,6 +221,7 @@ function boot() {
     const body = el('div', undefined, 'markdown');
     if (Array.isArray(message.content)) message.content.forEach(p => media(body,p)); else markdown(body, message.content || '');
     article.append(body);
+    if (message.pending && message.loading && !message.content) article.append(el('p', loadingLabel(message.loading), 'hint muted model-loading'));
     if (/^data:audio\/wav;base64,/i.test(message.audio?.audio || '')) { const player = el('audio'); player.controls = true; player.src = message.audio.audio; player.setAttribute('aria-label','Generated speech'); article.append(player); }
     // Error, route and diagnostics are grouped in one footer after the content.
     const footer = el('footer', undefined, 'message-meta');
@@ -325,7 +347,7 @@ function boot() {
     const user = {role:'user', content: attachments.length ? [...(text ? [{type:'text',text}] : []),...attachments.map(a => a.part)] : text};
     const history = [...(c.history || c.messages.filter(m => !m.error).map(({role,content}) => ({role,content}))), user];
     const context = conversationContext(c);
-    const payload = {model:$('model').value || 'auto',messages:requestMessages(context,history)}; if (!agent) payload.stream = true;
+    const payload = {model:$('model').value || 'auto',messages:requestMessages(context,history)}; if (!agent) { payload.stream = true; payload.lh_events = true; }
     try { requestBody(payload); } catch (error) { report(error); return; }
     const answer = {role:'assistant',content:'',events:[],pending:true,stats:startStats()}; c.messages.push(user,answer); c.history = history;
     if (c.title === 'New conversation') c.title = text.slice(0,60) || 'Media conversation';
@@ -340,6 +362,10 @@ function boot() {
       await readSSE(response.body, frame => {
         if (frame.data === '[DONE]') { done = true; return; }
         let value; try { value = JSON.parse(frame.data); } catch { throw new Error('Invalid JSON in response stream.'); }
+        // Shown until the first content arrives (docs/ARCHITECTURE.md "Model lifecycle").
+        const loading = frame.event === 'model_loading' ? (agent ? value.data : value) : null;
+        if (loading) { answer.loading = loading; $('run-status').textContent = loadingLabel(loading); renderMessages(); return; }
+        if (answer.loading) { delete answer.loading; $('run-status').textContent = agent ? 'Agent running' : 'Receiving response…'; }
         if (agent) {
           run.id = value.run_id || run.id;
           const kind = value.event || frame.event, data = value.data || {};
@@ -376,7 +402,7 @@ function boot() {
       // Keep the submitted user message, but never treat a partial answer as complete.
       c.history = history; report(new Error(answer.error)); $('run-status').textContent = run.cancelled ? 'Cancelled' : 'Request failed';
     } finally {
-      delete answer.pending; active = null; busy(false); $('approvals').replaceChildren(); renderMessages(); persist();
+      delete answer.pending; delete answer.loading; active = null; busy(false); $('approvals').replaceChildren(); renderMessages(); persist();
     }
     const speakId = speakChoice; // The setting at completion time.
     if (!answer.error && typeof speakId === 'string' && answer.content.trim()) await speak(answer.content, speakId);
@@ -428,6 +454,20 @@ function boot() {
         }
         if (entries.length) group.append(grid);
       } else if (path === 'status') {
+        // Model lifecycle: every specialist and router with its load state.
+        if (data.models?.length) {
+          const box = el('div',undefined,'meta-block'), models = el('div',undefined,'card-grid');
+          const tone = {ready:'ok',loading:'warn',failed:'warn'};
+          for (const m of data.models) {
+            const card = el('article',undefined,'card');
+            card.append(cardHeader(m.id,[badge(modelStateLabel(m),tone[m.state] || 'muted'),...(m.pinned ? [badge('Pinned','muted')] : []),...(m.keep_warm ? [badge('Keep warm','muted')] : [])]));
+            card.append(meta([['Kind',m.kind],['Backend',m.backend ?? 'none'],['PID',m.pid ?? 'none'],['RAM estimate',formatBytes(m.ram_estimate_bytes)],['RSS',formatBytes(m.rss_bytes)],['Loads',m.loads ?? 0],...(m.error || m.reason ? [['Last event',m.error || m.reason]] : [])]));
+            models.append(card);
+          }
+          box.append(el('h4',`Models · engine ${data.engine || 'unknown'}${data.warmup?.state === 'running' ? ' · warming up' : ''}`),models);
+          if (data.budget) box.append(meta([['Memory budget',data.budget.memory_budget_bytes == null ? 'unlimited' : formatBytes(data.budget.memory_budget_bytes)],['Resident estimate',formatBytes(data.budget.resident_estimate_bytes)]]));
+          group.append(box);
+        }
         const processes = Object.entries(data.processes || {}), grid = el('div',undefined,'card-grid');
         for (const [id,p] of processes) { const card = el('article',undefined,'card'); card.append(cardHeader(id,[processBadge(p.state)]),meta([['PID',p.pid ?? 'none'],['Restarts',p.restarts]])); grid.append(card); }
         if (processes.length) group.append(grid);

@@ -4,13 +4,89 @@ use lh_protocol::{
     Answer, DecideRequest, DecideResponse, Question, RpcError,
     json::{self, Value, json},
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    os::unix::process::CommandExt,
+    process::{Child, Command, Stdio},
+    time::{Duration, Instant},
+};
+
+/// Optional stand-in for a llama-server (`model_processes = true`): `sleep`
+/// in its own process group that dies with the plugin, killed on unload.
+struct ModelProcess(Child);
+impl Drop for ModelProcess {
+    fn drop(&mut self) {
+        unsafe {
+            libc::kill(-(self.0.id() as i32), libc::SIGKILL);
+        }
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+impl ModelProcess {
+    fn spawn() -> Result<Self, RpcError> {
+        let mut command = Command::new("sleep");
+        command
+            .arg("3600")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setpgid(0, 0) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                #[cfg(target_os = "linux")]
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        command
+            .spawn()
+            .map(Self)
+            .map_err(|e| RpcError::new(-32001, format!("mock model process: {e}")))
+    }
+}
+
+struct Resident {
+    model: Value,
+    process: Option<ModelProcess>,
+    pinned: bool,
+    keep_warm: bool,
+    used: Instant,
+}
 
 #[derive(Default)]
 struct Mock {
-    loaded: BTreeMap<String, Value>,
+    loaded: BTreeMap<String, Resident>,
+    /// Fresh (non-idempotent) loads per key.
+    loads: BTreeMap<String, u64>,
     config: Value,
     decide_calls: u64,
+}
+impl Mock {
+    /// Crashed model processes and idle (TTL) models are no longer resident.
+    fn reap(&mut self) {
+        let ttl = self.config["idle_ttl_ms"]
+            .as_u64()
+            .map(Duration::from_millis);
+        self.loaded.retain(|_, r| {
+            let alive = r
+                .process
+                .as_mut()
+                .is_none_or(|p| matches!(p.0.try_wait(), Ok(None)));
+            let idle = ttl.is_some_and(|ttl| r.used.elapsed() >= ttl);
+            alive && (r.pinned || r.keep_warm || !idle)
+        });
+    }
+    fn estimate(&self, key: &str) -> Option<u64> {
+        let ram = &self.config["ram_bytes"];
+        ram.as_u64()
+            .or_else(|| ram[key].as_u64())
+            .or_else(|| ram["default"].as_u64())
+    }
 }
 fn error(message: impl Into<String>) -> RpcError {
     RpcError::new(-32602, message)
@@ -39,6 +115,7 @@ impl Handler for Mock {
                 json!({"name":"mock","version":env!("CARGO_PKG_VERSION"),"provides":["backend"],"capabilities":self.config.get("capabilities").cloned().unwrap_or(json!(["chat","decide","stream","transcribe","speak"]))}),
             );
         }
+        self.reap();
         match method {
             "backend/load" => {
                 if self.config["fail_load"] == true {
@@ -48,21 +125,83 @@ impl Handler for Mock {
                 if !params["model"]["source"].is_string() {
                     return Err(error("missing model.source"));
                 }
-                self.loaded.insert(key.into(), params["model"].clone());
+                if self.config["fail_load_keys"]
+                    .as_array()
+                    .is_some_and(|keys| keys.iter().any(|k| k == key))
+                {
+                    return Err(RpcError::new(
+                        -32001,
+                        format!("configured load failure for {key}"),
+                    ));
+                }
+                let pinned = params["pinned"] == true;
+                let keep_warm = params["keep_warm"] == true;
+                if let Some(r) = self.loaded.get_mut(key) {
+                    r.model = params["model"].clone();
+                    r.pinned |= pinned;
+                    r.keep_warm |= keep_warm;
+                    r.used = Instant::now();
+                    return Ok(json!({"key":key,"ready":true,"info":{"mock":true}}));
+                }
+                // Test hook: a slow, observable load with backend progress.
+                if let Some(ms) = self.config["load_delay_ms"].as_u64() {
+                    for step in 0..4u32 {
+                        ctx.progress("mock loading", Some(f64::from(step) / 4.0))
+                            .map_err(|e| error(e.to_string()))?;
+                        std::thread::sleep(Duration::from_millis(ms / 4));
+                    }
+                }
+                let process = if self.config["model_processes"] == true {
+                    Some(ModelProcess::spawn()?)
+                } else {
+                    None
+                };
+                self.loaded.insert(
+                    key.into(),
+                    Resident {
+                        model: params["model"].clone(),
+                        process,
+                        pinned,
+                        keep_warm,
+                        used: Instant::now(),
+                    },
+                );
+                *self.loads.entry(key.into()).or_default() += 1;
                 Ok(json!({"key":key,"ready":true,"info":{"mock":true}}))
+            }
+            "backend/estimate" => {
+                let key = params["key"].as_str().ok_or_else(|| error("missing key"))?;
+                match self.estimate(key) {
+                    Some(ram) => Ok(json!({"ram_bytes":ram,"basis":"configured"})),
+                    None => Err(RpcError::new(-32601, "Method not found")),
+                }
             }
             "backend/unload" => {
                 let key = params["key"].as_str().ok_or_else(|| error("missing key"))?;
                 self.loaded.remove(key);
                 Ok(json!({}))
             }
-            "backend/status" => Ok(
-                json!({"loaded":self.loaded.keys().map(|key| json!({"key":key,"pid":std::process::id(),"port":null,"idle_secs":0})).collect::<Vec<_>>(),"models":self.loaded,"pid":std::process::id(),"decide_calls":self.decide_calls,"config":self.config}),
-            ),
+            "backend/status" => {
+                let loaded: Vec<Value> = self
+                    .loaded
+                    .iter()
+                    .map(|(key, r)| {
+                        let pid = r.process.as_ref().map_or(std::process::id(), |p| p.0.id());
+                        json!({"key":key,"pid":pid,"port":null,"idle_secs":r.used.elapsed().as_secs(),
+                            "pinned":r.pinned,"keep_warm":r.keep_warm,"rss_bytes":self.estimate(key),"loads":self.loads.get(key)})
+                    })
+                    .collect();
+                let models: BTreeMap<&String, &Value> =
+                    self.loaded.iter().map(|(k, r)| (k, &r.model)).collect();
+                Ok(
+                    json!({"loaded":loaded,"models":models,"loads":self.loads,"pid":std::process::id(),"decide_calls":self.decide_calls,"config":self.config}),
+                )
+            }
             "backend/chat" | "backend/decide" | "backend/transcribe" | "backend/speak" => {
                 let key = params["key"].as_str().ok_or_else(|| error("missing key"))?;
-                if !self.loaded.contains_key(key) {
-                    return Err(RpcError::new(-32001, "model not loaded"));
+                match self.loaded.get_mut(key) {
+                    Some(r) => r.used = Instant::now(),
+                    None => return Err(RpcError::new(-32001, "model not loaded")),
                 }
                 if method == "backend/transcribe" {
                     let request: lh_protocol::TranscribeRequest =
@@ -216,6 +355,20 @@ impl Handler for Mock {
             }
             // Fault injection is disabled unless explicitly enabled at initialization.
             "mock/crash" if self.config["enable_test_methods"] == true => std::process::exit(17),
+            // Simulates a crashed model server (llama-server dying under the plugin).
+            "mock/kill_model" if self.config["enable_test_methods"] == true => {
+                let key = params["key"].as_str().ok_or_else(|| error("missing key"))?;
+                let pid = self
+                    .loaded
+                    .get(key)
+                    .and_then(|r| r.process.as_ref())
+                    .map(|p| p.0.id())
+                    .ok_or_else(|| error("no model process"))?;
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
+                Ok(json!({"killed":pid}))
+            }
             "mock/flood" if self.config["enable_test_methods"] == true => {
                 for _ in 0..512 {
                     ctx.stream(json!({"content":"x".repeat(4096)}))

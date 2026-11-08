@@ -683,6 +683,7 @@ dependencies = [
  "lh-core",
  "lh-plugin-sdk",
  "lh-protocol",
+ "libc",
  "tokio",
 ]
 
