@@ -185,6 +185,9 @@ assert.match(html,/<div class="composer-speak"><label for="speak">Speak replies<
 assert.doesNotMatch(html,/id="speak" type="checkbox"|speack/i);
 // At 390x844 the dropdown takes its own row; the composer limits hint is hidden on mobile instead.
 assert.match(layout.slice(layout.indexOf('@media (max-width: 760px)')),/#composer > \.hint \{ display: none; \}/);
+// The mobile nav is one internally scrolling line (plan section 4, M1) with ring-safe padding,
+// and a focused link is scrolled fully into view (found when the Options link was added).
+assert.match(source,/querySelector\('\.app-nav'\)\.addEventListener\('focusin',event => event\.target\.scrollIntoView\(\{block:'nearest',inline:'nearest'\}\)\)/);
 // Success notes are info, failures default to error; metadata is dt/dd, not dot-joined sentences.
 assert.match(source,/const notice = \(text, kind = 'error'\) => \{[^}]*dataset\.kind = kind/);
 for (const text of ['Code copied.','Token saved for this tab.','Token cleared.']) assert.match(source,new RegExp(`notice\\('${text.replace('.','\\.')}', 'info'\\)`),text);
@@ -206,6 +209,7 @@ assert.match(source,/\$\('conversation-title'\)\.textContent = \$\('conversation
 assert.match(rule(layout,'.card-header .badges'),/min-width: 0;[^}]*max-width: 60%/);
 assert.match(rule(mobile,'.conversation-item'),/max-width: min\(12\.5rem, 100%\)/);
 assert.match(rule(mobile,'#conversation-list'),/scroll-padding-inline: var\(--space-2, \.5rem\)/);
+assert.match(rule(mobile,'.app-nav'),/flex-wrap: nowrap; overflow-x: auto;[^}]*padding: 5px; margin: 0 -5px; scroll-padding-inline: 5px/);
 // and the native file input spilled past the 320 px gutter.
 assert.match(rule(layout,'.file-label'),/max-width: 100%; min-width: 0/);
 // A pending approval card collapsed to 0 px (1024x768, mobile) or clipped its buttons (1366x900):

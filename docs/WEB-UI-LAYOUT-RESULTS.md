@@ -73,7 +73,12 @@ Management
   the theme toggle is visually above the nav but follows it in tab order.
   Accepted, single known A1 exception; desktop order matches visual order.
 - Mobile nav wraps instead of scrolling (fits one row down to ~350 px) so
-  focus rings are never clipped by a scroll box.
+  focus rings are never clipped by a scroll box. Superseded (t_53ab2047): with
+  the sixth nav item (Options) it wrapped to two rows at 390 px and, together
+  with the Speak replies dropdown row, pushed Send below 844 px (M2). The nav is
+  now one internally scrolling line as planned (M1), with 5 px ring-safe
+  padding, `scroll-padding-inline` and a `focusin` → `scrollIntoView` so a
+  focused link and its ring are fully visible (probed at 390 and 320 px).
 - Message role labels stay `h3` (plan typography says "h4 size"); `h4` would
   skip a level under the h2 conversation title (A4).
 - Layout containers' padding (header, connection, notices, main gutters,

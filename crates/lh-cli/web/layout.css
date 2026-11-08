@@ -128,8 +128,10 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
 
 @media (max-width: 760px) {
-  /* Row 1: brand + theme toggle; row 2: the nav. It wraps instead of scrolling so
-     focus rings are never clipped by a scroll box (one row down to ~350px). */
+  /* Row 1: brand + theme toggle; row 2: the nav, one line that scrolls internally when
+     the items do not fit (plan section 4, M1), so it never pushes Send below the fold.
+     The 5px padding (offset 2px + ring 3px), cancelled by a negative margin, keeps
+     focus rings inside the scroll box; scroll-padding brings an edge item fully in. */
   .app-header {
     display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand theme" "nav nav";
     gap: var(--space-1, .25rem) var(--space-2, .5rem); padding: var(--space-2, .5rem) var(--space-3, .75rem) 0;
@@ -137,8 +139,8 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
   .brand { grid-area: brand; }
   .brand .subtitle { display: none; }
   .app-header #theme { grid-area: theme; margin: 0; }
-  .app-nav { grid-area: nav; flex-wrap: wrap; overflow: visible; padding: var(--space-1, .25rem) 0; }
-  .app-nav a { min-height: 44px; }
+  .app-nav { grid-area: nav; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding: 5px; margin: 0 -5px; scroll-padding-inline: 5px; }
+  .app-nav a { flex: 0 0 auto; min-height: 44px; }
   .connection { padding: 0 var(--space-3, .75rem); }
   .notices { padding: 0 var(--space-3, .75rem); }
   main { padding: var(--space-2, .5rem) var(--space-3, .75rem) var(--space-3, .75rem); }

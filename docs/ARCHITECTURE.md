@@ -621,7 +621,8 @@ model without speak IDs offers only "`<none>`". The change handler calls
 `chooseSpeak(speakChoiceFromValue(value))` (`""` → `null`). Until the first
 `/v1/models` answer only "`<none>`" exists and nothing is spoken. At ≤760 px
 the dropdown takes its own composer row and the attachment-limits hint is
-hidden so 390×844 does not scroll.
+hidden so 390×844 does not scroll (the mobile nav is one internally scrolling
+line for the same reason).
 The REPL `/speak` toggle is unchanged (unique speak specialist).
 
 ### Generation statistics

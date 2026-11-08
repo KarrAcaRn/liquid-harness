@@ -481,6 +481,9 @@ function boot() {
   $('speak').addEventListener('change',event => chooseSpeak(speakChoiceFromValue(event.target.value)));
   $('refresh-models').addEventListener('click',() => models().catch(report)); $('refresh-page').addEventListener('click',() => management().catch(report));
   window.addEventListener('hashchange',() => management().catch(report));
+  // On mobile the nav scrolls internally; browsers leave a partly hidden focused link where it
+  // is, so bring it (and its focus ring, via scroll-padding) fully into view.
+  document.querySelector('.app-nav').addEventListener('focusin',event => event.target.scrollIntoView({block:'nearest',inline:'nearest'}));
   window.addEventListener('storage',event => {
     if (event.key === 'lh.conversations' || event.key === null) {
       storageBlocked = true;
