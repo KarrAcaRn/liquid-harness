@@ -589,6 +589,8 @@ File/MediaRecorder inputs are bounded at 4 MiB per turn, complete JSON at 6 MiB.
 WebM/Ogg/MP4 conversion remains the backend's ffmpeg responsibility. Speech uses
 the binary WAV API and an audio player. Real hardware permissions, browser quota
 and model context windows remain external limits. Verification: [M4c](M4C-RESULTS.md).
+Target page structure, design rules and file ownership for the UI cleanup:
+[WEB-UI-PLAN](WEB-UI-PLAN.md).
 
 ## 9. Configuration
 ### Agent execution and management (M4b)
