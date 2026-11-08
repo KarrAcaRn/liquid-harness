@@ -1,5 +1,270 @@
-:root{color-scheme:light;--bg:#f4f6fa;--panel:#fff;--text:#182235;--muted:#526078;--line:#cbd3e0;--accent:#204fc8;--hover:#e8eefc;--error:#ad1836;--code:#edf1f7;--shadow:0 4px 20px #1822350c;font:16px/1.55 system-ui,sans-serif}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){color-scheme:dark;--bg:#10151e;--panel:#192230;--text:#e4eaf5;--muted:#a8b6ce;--line:#35445b;--accent:#91b5ff;--hover:#263753;--error:#ff9aac;--code:#101824;--shadow:0 4px 20px #0002}}
-:root[data-theme=dark]{color-scheme:dark;--bg:#10151e;--panel:#192230;--text:#e4eaf5;--muted:#a8b6ce;--line:#35445b;--accent:#91b5ff;--hover:#263753;--error:#ff9aac;--code:#101824;--shadow:0 4px 20px #0002}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text)}[hidden]{display:none!important}header,nav,main,.connection,#notice,#storage-warning{max-width:1440px;margin:auto}header{display:flex;align-items:center;gap:1rem;padding:1rem 1.5rem}header h1{font-size:1.35rem;margin:0}header button{margin-left:auto}nav{display:flex;gap:.5rem;padding:0 1.5rem 1rem;border-bottom:1px solid var(--line)}a{color:var(--accent);overflow-wrap:anywhere}nav a{padding:.4rem .9rem;text-decoration:none;border-radius:.5rem}nav a[aria-current=page],button.selected{background:var(--hover);outline:1px solid var(--accent)}h2{font-size:1.2rem}h3{font-size:1rem}h4{margin:.5rem 0;font-size:1rem}.muted{color:var(--muted);font-size:.88rem}button,input,textarea,select{font:inherit}button,select,input,textarea{border:1px solid var(--line);border-radius:.4rem;background:var(--panel);color:var(--text)}button{cursor:pointer;padding:.4rem .75rem}button:hover:not(:disabled){background:var(--hover);border-color:var(--accent)}button:disabled{opacity:.5;cursor:not-allowed}:focus-visible{outline:3px solid var(--accent);outline-offset:3px}input:not([type=checkbox]),select{padding:.4rem}input[type=checkbox]{accent-color:var(--accent)}label{font-size:.92rem}textarea{width:100%;resize:vertical;padding:.7rem;min-height:90px}main{padding:1.5rem}#chat-page{display:grid;grid-template-columns:240px minmax(0,1fr);gap:1.5rem}aside{border-right:1px solid var(--line);padding-right:1.2rem}#conversation-list{display:flex;flex-direction:column;gap:.5rem;margin:1rem 0}#conversation-list button{text-align:left;overflow-wrap:anywhere}.chat-main{min-width:0}.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem;margin:.65rem 0}.toolbar h2{margin-right:auto;overflow-wrap:anywhere}#messages{display:flex;flex-direction:column;gap:1rem;min-height:200px;max-height:60vh;overflow:auto;padding:.25rem .5rem .75rem .25rem}.message,.card,.panel,.approval{border:1px solid var(--line);border-radius:.7rem;padding:1rem;background:var(--panel);box-shadow:var(--shadow);min-width:0}.message.user{border-left:3px solid var(--accent)}.message h3{margin:0 0 .5rem}.message p{overflow-wrap:anywhere}.message img,.attachment img{max-width:100%;max-height:260px;object-fit:contain;display:block;border-radius:.4rem}audio{max-width:100%;display:block;margin:.5rem 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:32rem;overflow:auto;background:var(--code);border:1px solid var(--line);border-radius:.4rem;padding:.8rem;font-size:.85rem}pre button{display:block;margin-top:.75rem}code{font-family:ui-monospace,monospace;background:var(--code);border-radius:.2rem;padding:.1rem .2rem}pre code{padding:0}.markdown p{margin:.5rem 0}.markdown h1{font-size:1.5rem}.markdown h2{font-size:1.3rem}.markdown blockquote{border-left:3px solid var(--line);padding-left:.8rem;margin-left:0;color:var(--muted)}summary{cursor:pointer;color:var(--accent);overflow-wrap:anywhere}details{margin:.6rem 0}.connection{padding:.5rem 1.5rem}.connection form{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center}.connection p{font-size:.85rem;color:var(--muted)}#notice,#storage-warning{padding:.8rem 1.5rem;border:1px solid var(--error);color:var(--error);white-space:pre-wrap;overflow-wrap:anywhere}#storage-warning{margin-top:.5rem}.error{color:var(--error)}#composer{border-top:1px solid var(--line);padding-top:1rem}#send{border-color:var(--accent);font-weight:600}.file-label input{display:block;max-width:300px;font-size:.8rem}#attachments{display:flex;flex-wrap:wrap;gap:.7rem}.attachment{max-width:260px;display:flex;flex-direction:column;gap:.5rem;overflow-wrap:anywhere}.approval{border-color:var(--accent);margin:.75rem 0}.approval button{margin-right:.6rem}.card{margin:.75rem 0}.panel{margin:1rem 0}.panel p{overflow-wrap:anywhere}#run-status{color:var(--muted);font-size:.9rem}#page-status{color:var(--muted)}
+/* Design system: tokens, element defaults, components and interaction states
+   (docs/WEB-UI-PLAN.md section 5, rules and contrast results in
+   docs/WEB-UI-STYLE-RESULTS.md). Placement lives in layout.css, which loads
+   after this file. Spacing uses only the --space-* scale; single breakpoint 760px. */
+
+/* ---- Tokens ---------------------------------------------------------------- */
+:root {
+  --space-1: .25rem; --space-2: .5rem; --space-3: .75rem; --space-4: 1rem; --space-5: 1.5rem; --space-6: 2rem;
+  --font-size-s: .875rem; --font-size-m: 1rem; --font-size-l: 1.125rem; --font-size-xl: 1.375rem;
+  --radius-s: .4rem; --radius-m: .7rem;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --control-height: 40px;
+  color-scheme: light;
+  --bg: #f4f6fa; --panel: #fff; --text: #182235; --muted: #526078;
+  --line: #cbd3e0; --line-strong: #7a8699;
+  --accent: #204fc8; --accent-hover: #1a3fa3; --on-accent: #fff;
+  --hover: #e8eefc; --active: #d5e0fa; --user-bg: #eef3fd; --code: #edf1f7;
+  --error: #ad1836; --error-bg: #fcebee;
+  --ok: #176b38; --ok-bg: #e2f3e7; --warn: #8a4700; --warn-bg: #fcefd9;
+  --shadow: 0 4px 20px #1822350c;
+  font: 16px/1.55 system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) {
+    color-scheme: dark;
+    --bg: #10151e; --panel: #192230; --text: #e4eaf5; --muted: #a8b6ce;
+    --line: #35445b; --line-strong: #6e819f;
+    --accent: #91b5ff; --accent-hover: #b3cbff; --on-accent: #0b1730;
+    --hover: #263753; --active: #2f4568; --user-bg: #1e2b40; --code: #101824;
+    --error: #ff9aac; --error-bg: #3a1a22;
+    --ok: #86dca3; --ok-bg: #163022; --warn: #ffc879; --warn-bg: #36270f;
+    --shadow: 0 4px 20px #0002;
+  }
+}
+:root[data-theme=dark] {
+  color-scheme: dark;
+  --bg: #10151e; --panel: #192230; --text: #e4eaf5; --muted: #a8b6ce;
+  --line: #35445b; --line-strong: #6e819f;
+  --accent: #91b5ff; --accent-hover: #b3cbff; --on-accent: #0b1730;
+  --hover: #263753; --active: #2f4568; --user-bg: #1e2b40; --code: #101824;
+  --error: #ff9aac; --error-bg: #3a1a22;
+  --ok: #86dca3; --ok-bg: #163022; --warn: #ffc879; --warn-bg: #36270f;
+  --shadow: 0 4px 20px #0002;
+}
+
+/* ---- Base elements ----------------------------------------------------------- */
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+[hidden] { display: none !important; }
+
+a { color: var(--accent); overflow-wrap: anywhere; text-underline-offset: .15em; }
+a:hover { text-decoration-thickness: 2px; }
+
+/* Heading hierarchy in UI chrome: h1 brand, h2 view title, h3 section, h4 card. */
+h1, h2, h3, h4, h5, h6 { font-weight: 600; line-height: 1.25; }
+h1 { font-size: var(--font-size-l); }
+h2 { font-size: var(--font-size-xl); margin: var(--space-4) 0 var(--space-3); }
+h3 { font-size: var(--font-size-l); margin: var(--space-4) 0 var(--space-3); }
+h4 { font-size: var(--font-size-m); margin: var(--space-2) 0; }
+/* Sidebar heading is a section label, not a second view title. */
+.conversations h2, #conversations-heading { font-size: var(--font-size-m); }
+
+.muted, .hint { color: var(--muted); font-size: var(--font-size-s); }
+.hint { margin: var(--space-2) 0; }
+.error { color: var(--error); }
+
+label { font-size: var(--font-size-s); font-weight: 500; }
+code, pre, kbd, samp { font-family: var(--font-mono); font-size: var(--font-size-s); }
+code { background: var(--code); border-radius: var(--radius-s); padding: 0 var(--space-1); }
+pre {
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 32rem; overflow: auto;
+  background: var(--code); border: 1px solid var(--line); border-radius: var(--radius-s);
+  padding: var(--space-3); margin: var(--space-2) 0;
+}
+pre code { padding: 0; background: none; }
+pre button { display: block; margin-top: var(--space-3); }
+audio { max-width: 100%; display: block; margin: var(--space-2) 0; }
+
+/* ---- Controls ---------------------------------------------------------------- */
+button, input, textarea, select { font: inherit; color: var(--text); }
+button, select, input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea {
+  border: 1px solid var(--line-strong); border-radius: var(--radius-s); background: var(--panel);
+}
+button, select, input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: var(--control-height); }
+input:not([type=checkbox]):not([type=radio]):not([type=file]), select { padding: var(--space-1) var(--space-2); }
+textarea { width: 100%; resize: vertical; padding: var(--space-3); min-height: 90px; }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
+/* Secondary (default) button. */
+button {
+  padding: var(--space-1) var(--space-3); cursor: pointer; font-weight: 500;
+}
+button:hover:not(:disabled) { background: var(--hover); border-color: var(--accent); }
+button:active:not(:disabled) { background: var(--active); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Primary: one per region (Send, Save token). */
+.button-primary, #send { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.button-primary:hover:not(:disabled), #send:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent); }
+.button-primary:active:not(:disabled), #send:active:not(:disabled) { background: var(--accent); }
+
+/* Danger: destructive actions (Delete conversation). */
+.button-danger, #delete-chat { color: var(--error); border-color: var(--error); }
+.button-danger:hover:not(:disabled), #delete-chat:hover:not(:disabled) { background: var(--error-bg); border-color: var(--error); color: var(--error); }
+.button-danger:active:not(:disabled), #delete-chat:active:not(:disabled) { background: var(--error-bg); }
+
+/* Quiet: low emphasis (Toggle theme, Refresh models, Copy code, Clear token, Export). */
+.button-quiet { background: transparent; border-color: transparent; color: var(--muted); }
+.button-quiet:hover:not(:disabled) { background: var(--hover); border-color: var(--line-strong); color: var(--text); }
+
+input[type=checkbox], input[type=radio] { width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--accent); cursor: pointer; }
+/* Checkbox labels are the click target: give them the control height. */
+label:has(> input[type=checkbox]) { min-height: var(--control-height); cursor: pointer; }
+
+/* File input: native text stays (it reports the chosen files), the button looks like a secondary button. */
+input[type=file] { font-size: var(--font-size-s); color: var(--muted); max-width: 100%; border-radius: var(--radius-s); }
+input[type=file]::file-selector-button {
+  font: inherit; font-size: var(--font-size-s); font-weight: 500; color: var(--text); background: var(--panel);
+  min-height: var(--control-height); padding: var(--space-1) var(--space-3); margin-right: var(--space-2);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-s); cursor: pointer;
+}
+input[type=file]:hover::file-selector-button { background: var(--hover); border-color: var(--accent); }
+
+/* Keyboard focus: one ring for every interactive element, in both themes. */
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+input[type=file]:focus-visible { outline-offset: 2px; }
+
+/* Disclosures: content-coloured, never as loud as the primary action. */
+details { margin: var(--space-2) 0; }
+summary {
+  cursor: pointer; overflow-wrap: anywhere; min-height: var(--control-height);
+  padding: var(--space-2) var(--space-1); border-radius: var(--radius-s); font-weight: 500;
+}
+summary:hover { background: var(--hover); }
+details.raw-json > summary, .message-meta summary { color: var(--muted); font-size: var(--font-size-s); font-weight: 400; }
+details.raw-json > summary:hover, .message-meta summary:hover { color: var(--text); }
+details.raw-json > pre { margin-top: var(--space-1); }
+
+/* ---- Navigation and shell ---------------------------------------------------------- */
+.app-nav a, nav a {
+  padding: 0 var(--space-3); border-radius: var(--radius-s); color: var(--text);
+  text-decoration: none; font-weight: 500;
+}
+.app-nav a:hover, nav a:hover { background: var(--hover); }
+/* Current page: tinted tab with an accent underline (box-shadow, so the focus outline stays intact). */
+.app-nav a[aria-current=page], nav a[aria-current=page] { background: var(--hover); font-weight: 600; box-shadow: inset 0 -3px 0 var(--accent); }
+.connection { border-bottom: 1px solid var(--line); }
+.connection > summary { color: var(--muted); font-size: var(--font-size-s); }
+.connection > summary:hover { color: var(--text); }
+.connection .hint { margin: var(--space-2) 0; }
+
+/* ---- Alerts, badges, status ---------------------------------------------------------- */
+.alert, #notice, #storage-warning {
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--error); border-left-width: 4px;
+  border-radius: var(--radius-s); background: var(--error-bg); color: var(--text);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.alert[data-kind=info], #notice[data-kind=info], #storage-warning[data-kind=info] { border-color: var(--accent); background: var(--hover); }
+
+.badge {
+  display: inline-flex; align-items: center; padding: 0 var(--space-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s); font-size: var(--font-size-s); font-weight: 600; line-height: 1.55; white-space: nowrap;
+  color: var(--muted); background: var(--code);
+}
+.badge-ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok); }
+.badge-warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn); }
+.badge-muted { color: var(--muted); background: var(--code); border-color: var(--line-strong); }
+
+.status-line, #run-status, #page-status { color: var(--muted); font-size: var(--font-size-s); }
+
+dl.meta { font-size: var(--font-size-s); }
+dl.meta dt { color: var(--muted); font-weight: 600; }
+dl.meta dd { color: var(--text); overflow-wrap: anywhere; }
+/* Paths and JSON in metadata: monospace without the inline-code tint, which breaks into strips when wrapped. */
+dl.meta code { background: none; padding: 0; }
+
+.visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+/* ---- Containers -------------------------------------------------------------- */
+.message, .card, .panel, .approval {
+  border: 1px solid var(--line); border-radius: var(--radius-m); padding: var(--space-4);
+  background: var(--panel); box-shadow: var(--shadow); min-width: 0;
+}
+/* Nested boxes: border only, no second shadow; a tinted surface separates them from the panel. */
+.panel .card, .panel .panel, .card .card { box-shadow: none; background: var(--bg); }
+.card { margin: var(--space-3) 0; padding: var(--space-3) var(--space-4); }
+.panel { margin: var(--space-4) 0; }
+.panel > h3 { margin-top: 0; }
+.panel p, .card p { overflow-wrap: anywhere; }
+.card > p { margin: var(--space-2) 0; }
+
+.message.user { background: var(--user-bg); border-left: 4px solid var(--accent); }
+.message.assistant { border-left: 4px solid var(--line-strong); }
+.message h3 { margin: 0 0 var(--space-2); font-size: var(--font-size-m); color: var(--muted); }
+.message p { overflow-wrap: anywhere; }
+.message img, .attachment img { max-width: 100%; max-height: 260px; object-fit: contain; display: block; border-radius: var(--radius-s); }
+.message-meta {
+  margin-top: var(--space-3); padding-top: var(--space-2); border-top: 1px solid var(--line);
+  color: var(--muted); font-size: var(--font-size-s);
+}
+.message-meta p { margin: var(--space-1) 0; }
+.message-meta .error { font-size: var(--font-size-m); }
+.empty-state { text-align: center; padding: var(--space-5) var(--space-4); }
+
+.approval { border-color: var(--warn); border-left-width: 4px; margin: var(--space-3) 0; }
+.approval h3 { margin: 0 0 var(--space-2); font-size: var(--font-size-m); }
+
+.attachment {
+  max-width: 260px; display: flex; flex-direction: column; gap: var(--space-2); overflow-wrap: anywhere;
+  padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--panel);
+  font-size: var(--font-size-s);
+}
+
+#composer { border-top: 1px solid var(--line); }
+
+/* Conversation list items: list entries, visually distinct from the action buttons around them. */
+.conversation-item, #conversation-list button {
+  text-align: left; overflow-wrap: anywhere;
+  background: transparent; border-color: transparent; font-weight: 400;
+}
+.conversation-item:hover:not(:disabled), #conversation-list button:hover:not(:disabled) { background: var(--hover); border-color: var(--line); }
+.conversation-item.selected, .conversation-item[aria-current=true], #conversation-list button.selected {
+  background: var(--hover); border-color: var(--line); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* ---- Rendered Markdown (user content; scaled to sit below the chrome headings) ---- */
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p { margin: var(--space-2) 0; }
+.markdown h1 { font-size: var(--font-size-xl); }
+.markdown h2 { font-size: var(--font-size-l); }
+.markdown h3, .markdown h4, .markdown h5, .markdown h6 { font-size: var(--font-size-m); }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { margin: var(--space-4) 0 var(--space-2); }
+.markdown ul, .markdown ol { padding-left: var(--space-5); }
+.markdown blockquote { border-left: 3px solid var(--line-strong); padding-left: var(--space-3); margin-left: 0; color: var(--muted); }
+.skill-content { margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+
+/* ---- Touch targets (single breakpoint) ----------------------------------------------- */
+@media (max-width: 760px) {
+  :root { --control-height: 44px; }
+  /* Five tabs stay on one row down to ~350px. */
+  .app-nav a, nav a { padding: 0 var(--space-2); }
+  /* The view title shares its row with Rename and Delete. */
+  h2 { font-size: var(--font-size-l); }
+}
+
+
+/* legacy layout – superseded by layout.css, removed in t_bf3172bc */
+header,nav,main,.connection,#notice,#storage-warning{max-width:1440px;margin:auto}
+header{display:flex;align-items:center;gap:1rem;padding:1rem 1.5rem}
+header button{margin-left:auto}
+nav{display:flex;gap:.5rem;padding:0 1.5rem 1rem;border-bottom:1px solid var(--line)}
+main{padding:1.5rem}
+#chat-page{display:grid;grid-template-columns:240px minmax(0,1fr);gap:1.5rem}
+aside{border-right:1px solid var(--line);padding-right:1.2rem}
+#conversation-list{display:flex;flex-direction:column;gap:.5rem;margin:1rem 0}
+#conversation-list button{text-align:left;overflow-wrap:anywhere}
+.chat-main{min-width:0}
+.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:.65rem;margin:.65rem 0}
+.toolbar h2{margin-right:auto;overflow-wrap:anywhere}
+#messages{display:flex;flex-direction:column;gap:1rem;min-height:200px;max-height:60vh;overflow:auto;padding:.25rem .5rem .75rem .25rem}
+.connection{padding:.5rem 1.5rem}
+.connection form{display:flex;flex-wrap:wrap;gap:.7rem;align-items:center}
+#storage-warning{margin-top:.5rem}
+#composer{border-top:1px solid var(--line);padding-top:1rem}
+#attachments{display:flex;flex-wrap:wrap;gap:.7rem}
 @media(max-width:760px){header{flex-wrap:wrap;padding:1rem}header .muted{display:none}nav{overflow:auto;padding:0 .5rem .6rem;gap:0}nav a{padding:.4rem .6rem}main{padding:.75rem}#chat-page{grid-template-columns:1fr;gap:.5rem}aside{border-right:0;border-bottom:1px solid var(--line);padding:0 0 .8rem}aside h2{margin:.3rem 0}aside .muted{display:none}#conversation-list{max-height:150px;overflow:auto;flex-direction:row;flex-wrap:wrap;margin:.6rem 0}#conversation-list button{max-width:200px}#messages{max-height:55vh}.toolbar{gap:.5rem}.connection{padding:.5rem 1rem}}
