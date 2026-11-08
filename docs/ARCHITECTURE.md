@@ -558,13 +558,18 @@ transcription again. No automatic context truncation/summarization is performed.
 
 The default-on `web` feature implies `server`; `--no-default-features --features
 server` keeps the API without the UI. `GET`/`HEAD` on `/`, `/index.html`,
-`/app.mjs`, `/markdown.mjs`, `/stats.mjs`, `/style.css` serves compile-time embedded assets,
+`/app.mjs`, `/markdown.mjs`, `/stats.mjs`, `/style.css`, `/layout.css` serves compile-time embedded assets,
 not arbitrary filesystem paths. These immutable assets are public to bootstrap
 token entry; every API data/control request still requires the configured token.
 The UI sends it as a bearer header and stores it only in sessionStorage.
 Assets have explicit UTF-8 MIME types, no-cache, nosniff, no-referrer and CSP:
 self-only scripts/styles/connect, self/data/blob images and media, no objects,
 base URLs or framing. No inline scripts/styles, eval, CDN or runtime framework.
+`style.css` holds design tokens and component visuals; `layout.css` (loaded
+after it) holds placement only: the app shell, the chat view that fits the
+viewport (`body[data-page=chat]`, set by `app.mjs`; only `#messages` scrolls),
+composer rows with Send as the trailing control, and the management card grid.
+Both share one breakpoint (760 px); see `docs/WEB-UI-PLAN.md`.
 
 Hash navigation selects Chat/Plugins/Tools/Skills/Status. Read-only management
 uses existing M4b endpoints sequentially (parallel reads would contend for the

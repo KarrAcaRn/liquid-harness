@@ -59,7 +59,8 @@ function boot() {
   const $ = id => document.getElementById(id);
   const el = (tag, text, cls) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; };
   const button = (text, action) => { const b = el('button', text); b.type = 'button'; b.addEventListener('click', () => Promise.resolve().then(action).catch(report)); return b; };
-  const notice = text => { $('notice').textContent = text; $('notice').hidden = !text; };
+  // kind 'error' (default) for failures, 'info' for confirmations; style.css colours by data-kind.
+  const notice = (text, kind = 'error') => { $('notice').textContent = text; $('notice').dataset.kind = kind; $('notice').hidden = !text; };
   const report = error => notice(error.message || String(error));
   let storageBlocked = false, token = '', active = null, attachments = [], attachmentBusy = false, recorder = null, recordingTimer = null, recordingPending = false, speechURL = null;
   let conversations = [], selected, pageVersion = 0, savedSnapshot = null;
@@ -102,10 +103,21 @@ function boot() {
     const id = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2,'0')).join('');
     const c = { id, title: 'New conversation', messages: [], history: [] }; conversations.unshift(c); selected = c.id; persist(); render();
   }
-  function jsonDetails(title, value) { const d = el('details'); d.append(el('summary', title), el('pre', JSON.stringify(value,null,2))); return d; }
+  function jsonDetails(title, value, cls = 'raw-json') { const d = el('details', undefined, cls || undefined); d.append(el('summary', title), el('pre', JSON.stringify(value,null,2))); return d; }
+  // Key/value metadata: one dt/dd pair per field; empty values read "none", never a dangling label.
+  // A third element `true` marks a long value (JSON, paths) that gets the full row width.
+  const list = values => (values || []).join(', ') || 'none';
+  const code = text => el('code', String(text));
+  function meta(pairs) {
+    const dl = el('dl', undefined, 'meta');
+    for (const [key, value, wide] of pairs) { const dt = el('dt', key, wide ? 'wide' : undefined), dd = el('dd', undefined, wide ? 'wide' : undefined); if (value instanceof Node) dd.append(value); else dd.textContent = value === undefined || value === null || value === '' ? 'none' : String(value); dl.append(dt, dd); }
+    return dl;
+  }
+  const badge = (text, kind) => el('span', text, `badge badge-${kind}`);
+  function cardHeader(title, badges = []) { const header = el('div', undefined, 'card-header'); header.append(el('h4', title)); if (badges.length) { const group = el('span', undefined, 'badges'); group.append(...badges); header.append(group); } return header; }
   function markdown(node, text) {
     node.innerHTML = renderMarkdown(text); // Only escaped, locally generated renderer output.
-    for (const pre of node.querySelectorAll('pre')) pre.append(button('Copy code', async () => { await navigator.clipboard.writeText(pre.querySelector('code').textContent); notice('Code copied.'); }));
+    for (const pre of node.querySelectorAll('pre')) { const copy = button('Copy code', async () => { await navigator.clipboard.writeText(pre.querySelector('code').textContent); notice('Code copied.', 'info'); }); copy.className = 'button-quiet'; pre.append(copy); }
   }
   function media(parent, part) {
     if (part.type === 'text') { const p = el('div'); markdown(p, part.text || ''); parent.append(p); }
@@ -118,23 +130,27 @@ function boot() {
     if (Array.isArray(message.content)) message.content.forEach(p => media(body,p)); else markdown(body, message.content || '');
     article.append(body);
     if (/^data:audio\/wav;base64,/i.test(message.audio?.audio || '')) { const player = el('audio'); player.controls = true; player.src = message.audio.audio; player.setAttribute('aria-label','Generated speech'); article.append(player); }
-    if (message.error) article.append(el('p', message.error, 'error'));
-    if (message.route) { const r = message.route; article.append(el('p', `Route: ${r.specialist || 'unknown'} · backend ${r.backend || 'not reported'} · confidence ${r.confidence ?? 'unknown'} · ${r.reason || ''}`, 'muted'), jsonDetails('Full route details',r)); }
-    if (message.events?.length) article.append(jsonDetails(`Agent steps and tool calls/results (${message.steps ?? 'in progress'})`,message.events));
-    if (message.response) article.append(jsonDetails('Response metadata',message.response));
+    // Error, route and diagnostics are grouped in one footer after the content.
+    const footer = el('footer', undefined, 'message-meta');
+    if (message.error) footer.append(el('p', message.error, 'error'));
+    if (message.route) { const r = message.route; footer.append(el('p', `Route: ${r.specialist || 'unknown'} · backend ${r.backend || 'not reported'} · confidence ${r.confidence ?? 'unknown'} · ${r.reason || ''}`, 'hint muted'), jsonDetails('Full route details',r)); }
+    if (message.events?.length) footer.append(jsonDetails(`Agent steps and tool calls/results (${message.steps ?? 'in progress'})`,message.events));
+    if (message.response) footer.append(jsonDetails('Response metadata',message.response));
+    if (footer.childElementCount) article.append(footer);
     return article;
   }
   function renderMessages() {
     const box = $('messages');
     const follow = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
     const opened = [...box.querySelectorAll('details')].map(d => d.open);
-    box.replaceChildren(...(current()?.messages || []).map(renderMessage));
+    const shown = current()?.messages || [];
+    box.replaceChildren(...(shown.length ? shown.map(renderMessage) : [el('p', 'No messages yet.', 'hint muted empty-state')]));
     [...box.querySelectorAll('details')].forEach((d,i) => { d.open = Boolean(opened[i]); });
     if (follow) box.scrollTop = box.scrollHeight;
   }
   function render() {
     $('conversation-title').textContent = current()?.title || 'New conversation';
-    $('conversation-list').replaceChildren(...conversations.map(c => { const b = button(c.title, () => { if (!canChangeConversation()) return; selected = c.id; render(); }); b.className = c.id === selected ? 'selected' : ''; b.setAttribute('aria-current',String(c.id === selected)); return b; }));
+    $('conversation-list').replaceChildren(...conversations.map(c => { const b = button(c.title, () => { if (!canChangeConversation()) return; selected = c.id; render(); }); b.className = c.id === selected ? 'conversation-item selected' : 'conversation-item'; b.setAttribute('aria-current',String(c.id === selected)); return b; }));
     renderMessages();
   }
   async function api(path, { value, signal } = {}) {
@@ -185,11 +201,14 @@ function boot() {
     if (speechURL) URL.revokeObjectURL(speechURL);
     speechURL = URL.createObjectURL(await response.blob());
     $('speech-player').src = speechURL; $('speech-player').hidden = false;
-    try { await $('speech-player').play(); } catch { notice('Speech is ready. Press play in the audio player.'); }
+    try { await $('speech-player').play(); } catch { notice('Speech is ready. Press play in the audio player.', 'info'); }
   }
   function approval(run, data) {
-    const card = el('section',undefined,'approval'); card.append(el('h3',`Approval required: ${data.name}`),el('p','Review the complete arguments before allowing this tool. Shell commands are not sandboxed.'),jsonDetails('Tool arguments',data));
-    for (const [label,allow,always] of [['Allow',true,false],['Deny',false,false],['Always',true,true]]) card.append(button(label, async () => {
+    const card = el('section',undefined,'approval'), actions = el('div',undefined,'toolbar approval-actions');
+    // The tool arguments are content to review, not a quiet diagnostic disclosure.
+    card.append(el('h3',`Approval required: ${data.name}`),el('p','Review the complete arguments before allowing this tool. Shell commands are not sandboxed.'),jsonDetails('Tool arguments',data,''),el('p','Agent approval “Always” applies only to identical calls in this run.','hint muted'),actions);
+    // Allow, Deny and Always stay equal secondary buttons: no visual nudge towards allowing tools.
+    for (const [label,allow,always] of [['Allow',true,false],['Deny',false,false],['Always',true,true]]) actions.append(button(label, async () => {
       if (active !== run || !run.id) throw new Error('This run is no longer active.');
       const controls = [...card.querySelectorAll('button')]; controls.forEach(b => b.disabled = true);
       try { await api(`/lh/v1/agent/runs/${encodeURIComponent(run.id)}/approve`,{value:{call_id:data.call_id,allow,always}}); card.replaceChildren(el('p',`${data.name}: ${label} submitted. Waiting for the run result.`)); }
@@ -264,6 +283,7 @@ function boot() {
     const page = ['plugins','tools','skills','status'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chat';
     document.querySelectorAll('nav a').forEach(a => { if (a.hash === `#${page}`) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
     $('chat-page').hidden = page !== 'chat'; $('management-page').hidden = page === 'chat';
+    document.body.dataset.page = page; // layout.css: the chat view fits the viewport, management pages scroll.
     const version = ++pageVersion; if (page === 'chat') return;
     $('page-title').textContent = page[0].toUpperCase()+page.slice(1); $('management-content').replaceChildren(); $('page-status').textContent = 'Loading…';
     const paths = page === 'plugins' ? ['plugins','specialists','router'] : page === 'status' ? ['status','router'] : [page];
@@ -276,25 +296,41 @@ function boot() {
     }
     if (version !== pageVersion) return;
     $('page-status').textContent = results.some(r => r.error) ? 'Some data could not be loaded. Refresh to retry.' : 'Current server snapshot (not automatically refreshed).';
+    const processBadge = state => badge(`Process ${state || 'unknown'}`, state === 'running' ? 'ok' : state === 'failed' ? 'warn' : 'muted');
+    const block = (title, value) => { const box = el('div', undefined, 'meta-block'); box.append(el('h4', title), el('pre', JSON.stringify(value, null, 2))); return box; };
     for (const {path,data,error} of results) {
-      const group = el('section',undefined,'panel'); group.append(el('h3',path[0].toUpperCase()+path.slice(1)));
+      const name = path[0].toUpperCase()+path.slice(1), group = el('section',undefined,'panel'), heading = el('h3',name); group.append(heading);
       if (error) { group.append(el('p',error.message,'error')); $('management-content').append(group); continue; }
       const entries = data[path];
       if (Array.isArray(entries)) {
+        heading.textContent = `${name} (${entries.length})`;
         if (!entries.length) group.append(el('p','No entries available.'));
+        const grid = el('div',undefined,'card-grid');
         for (const item of entries) {
-          const card = el('article',undefined,'card'); card.append(el('h4',item.id || item.name),el('p',item.description || item.route || ''));
-          if (path === 'plugins') card.append(el('p',`${item.enabled ? 'Enabled' : 'Disabled'} · version ${item.version} · provides ${(item.provides || []).join(', ')} · process ${item.process?.state || 'unknown'} · PID ${item.process?.pid ?? 'none'} · restarts ${item.process?.restarts ?? 0}`),el('p',`Capabilities (${item.capabilities_source}): ${JSON.stringify(item.capabilities)} · manifest: ${item.manifest_path}`));
-          if (path === 'specialists') card.append(el('p',`Task: ${item.task} · inputs ${(item.inputs || []).join(', ')} · outputs ${(item.outputs || []).join(', ')} · agent ${Boolean(item.agent)} · tools ${(item.tools || []).join(', ')}`));
-          if (path === 'tools') card.append(el('p',`Plugin: ${item.plugin} · original name: ${item.original_name} · ${item.destructive ? 'Destructive / requires policy review' : 'Read-only annotation'}`));
-          if (path === 'skills') { card.append(el('p',`Tools: ${(item.tools || []).join(', ') || 'none'}`)); card.append(button(`Read ${item.name}`,async () => { const detail = await (await api(`/lh/v1/skills/${encodeURIComponent(item.name)}`)).json(); const body = el('div',undefined,'markdown'); markdown(body,detail.content || ''); const viewer = el('section'); viewer.append(body,jsonDetails('Full skill JSON',detail)); const old = card.querySelector('.skill-content'); if (old) old.remove(); viewer.className = 'skill-content'; card.append(viewer); })); }
-          card.append(jsonDetails('Full entry JSON',item)); group.append(card);
+          const card = el('article',undefined,'card'), badges = [];
+          if (path === 'plugins') badges.push(badge(item.enabled ? 'Enabled' : 'Disabled', item.enabled ? 'ok' : 'muted'), processBadge(item.process?.state));
+          if (path === 'tools') badges.push(item.destructive ? badge('Destructive / requires policy review','warn') : badge('Read-only annotation','muted'));
+          card.append(cardHeader(item.id || item.name, badges));
+          if (item.description || item.route) card.append(el('p',item.description || item.route));
+          if (path === 'plugins') card.append(meta([['Version',item.version],['Provides',list(item.provides)],['PID',item.process?.pid ?? 'none'],['Restarts',item.process?.restarts ?? 0],['Capabilities source',item.capabilities_source],['Capabilities',code(JSON.stringify(item.capabilities)),true],['Manifest',code(item.manifest_path),true]]));
+          if (path === 'specialists') card.append(meta([['Task',item.task],['Inputs',list(item.inputs)],['Outputs',list(item.outputs)],['Agent',String(Boolean(item.agent))],['Tools',list(item.tools)]]));
+          if (path === 'tools') card.append(meta([['Plugin',item.plugin],['Original name',code(item.original_name)]]));
+          if (path === 'skills') {
+            card.append(meta([['Tools',list(item.tools)]]));
+            const actions = el('div',undefined,'card-actions');
+            actions.append(button(`Read ${item.name}`,async () => { const detail = await (await api(`/lh/v1/skills/${encodeURIComponent(item.name)}`)).json(); const body = el('div',undefined,'markdown'); markdown(body,detail.content || ''); const viewer = el('section'); viewer.append(body,jsonDetails('Full skill JSON',detail)); const old = card.querySelector('.skill-content'); if (old) old.remove(); viewer.className = 'skill-content'; actions.after(viewer); }));
+            card.append(actions);
+          }
+          card.append(jsonDetails('Full entry JSON',item)); grid.append(card);
         }
+        if (entries.length) group.append(grid);
       } else if (path === 'status') {
-        for (const [id,p] of Object.entries(data.processes || {})) group.append(el('p',`${id}: ${p.state} · PID ${p.pid ?? 'none'} · restarts ${p.restarts}`));
-        for (const resident of data.resident_models || []) group.append(el('p',`${resident.backend}: ${resident.error || JSON.stringify(resident.loaded)}`));
-        group.append(el('p',`Cascade statistics: ${JSON.stringify(data.cascade)}`));
-      } else if (path === 'router') group.append(el('p',`Selected router: ${data.selected} · model calls: ${data.stats?.model_calls ?? 0}`),el('p',`Stage counts: ${JSON.stringify(data.stats?.stage_counts || {})}`),el('p',`Recent routes: ${data.stats?.recent_routes?.length ?? 0}`));
+        const processes = Object.entries(data.processes || {}), grid = el('div',undefined,'card-grid');
+        for (const [id,p] of processes) { const card = el('article',undefined,'card'); card.append(cardHeader(id,[processBadge(p.state)]),meta([['PID',p.pid ?? 'none'],['Restarts',p.restarts]])); grid.append(card); }
+        if (processes.length) group.append(grid);
+        if (data.resident_models?.length) { const box = el('div',undefined,'meta-block'); box.append(el('h4','Resident models'),meta(data.resident_models.map(r => [r.backend, r.error || code(JSON.stringify(r.loaded)), true]))); group.append(box); }
+        group.append(block('Cascade statistics',data.cascade));
+      } else if (path === 'router') group.append(meta([['Selected router',data.selected],['Model calls',data.stats?.model_calls ?? 0],['Recent routes',data.stats?.recent_routes?.length ?? 0]]),block('Stage counts',data.stats?.stage_counts || {}));
       if (data.builtins) group.append(jsonDetails('Built-in tool schemas',data.builtins));
       group.append(jsonDetails('Full management JSON',data)); $('management-content').append(group);
     }
@@ -306,15 +342,15 @@ function boot() {
     try {
       if (run.agent && run.id) await api(`/lh/v1/agent/runs/${encodeURIComponent(run.id)}/cancel`,{value:{}});
       run.cancelled = true; run.controller.abort();
-      notice('Cancellation requested. Backend inference may still drain; tool effects cannot be rolled back.');
+      notice('Cancellation requested. Backend inference may still drain; tool effects cannot be rolled back.', 'info');
     } catch (error) { report(error); }
   });
   $('new-chat').addEventListener('click',fresh);
   $('rename-chat').addEventListener('click',() => { const title = prompt('Conversation name',current().title); if (title?.trim()) { current().title = title.trim().slice(0,200); persist(); render(); } });
   $('delete-chat').addEventListener('click',() => { if (!confirm(`Delete “${current().title}”? This cannot be undone.`) || !canChangeConversation()) return; conversations = conversations.filter(c => c.id !== selected); selected = conversations[0]?.id; persist(); if (!selected) fresh(); else render(); });
   $('export').addEventListener('click',() => { const url = URL.createObjectURL(new Blob([JSON.stringify(conversations,null,2)],{type:'application/json'})); const a = el('a'); a.href = url; a.download = 'liquid-harness-conversations.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); });
-  $('auth-form').addEventListener('submit',event => { event.preventDefault(); token = $('token').value.trim(); try { sessionStorage.setItem('lh.token',token); notice('Token saved for this tab.'); } catch { storageWarning('Token remains in memory only: sessionStorage is unavailable.'); } models().catch(report); management().catch(report); });
-  $('clear-token').addEventListener('click',() => { token = ''; $('token').value = ''; try { sessionStorage.removeItem('lh.token'); notice('Token cleared.'); } catch { storageWarning('Could not clear sessionStorage; close this tab to clear its stored token. In-memory token cleared.'); } });
+  $('auth-form').addEventListener('submit',event => { event.preventDefault(); token = $('token').value.trim(); try { sessionStorage.setItem('lh.token',token); notice('Token saved for this tab.', 'info'); } catch { storageWarning('Token remains in memory only: sessionStorage is unavailable.'); } models().catch(report); management().catch(report); });
+  $('clear-token').addEventListener('click',() => { token = ''; $('token').value = ''; try { sessionStorage.removeItem('lh.token'); notice('Token cleared.', 'info'); } catch { storageWarning('Could not clear sessionStorage; close this tab to clear its stored token. In-memory token cleared.'); } });
   $('files').addEventListener('change',async event => { try { await attach([...event.target.files]); } catch (error) { report(error); } finally { event.target.value = ''; } });
   $('record').addEventListener('click',async () => {
     if (recorder) { recorder.stop(); return; }
@@ -332,7 +368,7 @@ function boot() {
         clearTimeout(recordingTimer); stream.getTracks().forEach(t => t.stop()); recorder = null; $('record').textContent = 'Record audio';
         try { if (oversized) throw new Error('Recording exceeded 4 MiB and was not attached. Record a shorter clip.'); await attach([new File(chunks,`recording.${mime.split('/')[1]}`,{type:mime})]); } catch (error) { report(error); }
       };
-      recorder.start(500); $('record').textContent = 'Stop recording'; recordingTimer = setTimeout(() => { if (recorder?.state === 'recording') { notice('Recording stopped at the two-minute limit.'); recorder.stop(); } },120000);
+      recorder.start(500); $('record').textContent = 'Stop recording'; recordingTimer = setTimeout(() => { if (recorder?.state === 'recording') { notice('Recording stopped at the two-minute limit.', 'info'); recorder.stop(); } },120000);
     } catch (error) { stream?.getTracks().forEach(t => t.stop()); report(error); } finally { recordingPending = false; }
   });
   let theme; try { theme = localStorage.getItem('lh.theme'); } catch { /* System theme is the fallback. */ }

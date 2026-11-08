@@ -197,6 +197,7 @@ fn embedded_ui_is_public_but_api_remains_authenticated() {
         ("/markdown.mjs", "text/javascript", "escapeHTML"),
         ("/stats.mjs", "text/javascript", "normalizeStats"),
         ("/style.css", "text/css", "prefers-color-scheme"),
+        ("/layout.css", "text/css", "#chat-page"),
     ] {
         let (status, headers, body) = server.request("GET", path, b"", "", None);
         assert_eq!(status, 200);

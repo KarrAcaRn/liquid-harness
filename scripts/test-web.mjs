@@ -77,4 +77,32 @@ assert.match(source,/const answer = \{role:'assistant',content:'',events:\[\],pe
 assert.match(source,/if \(!done\) throw[^\n]*\n[^\n]*\n\s*answer\.stats = completeStats\(answer\.stats, finalStats\);/);
 assert.match(source,/answer\.stats = endStats\(answer\.stats, run\.cancelled \? 'cancelled' : 'error'\);/);
 assert.match(source,/message\.stats = restoreStats\(message\.stats\)/);
-console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut and generation stats passed.');
+// Layout structure (docs/WEB-UI-PLAN.md sections 4-6): markup contract, CSP-safe CSS, kinds of notices.
+const web = name => readFileSync(fileURLToPath(new URL(`../crates/lh-cli/web/${name}`,import.meta.url)),'utf8');
+const html = web('index.html'), layout = web('layout.css').replace(/\/\*[\s\S]*?\*\//g,'');
+assert(html.indexOf('href="/style.css"') >= 0 && html.indexOf('href="/style.css"') < html.indexOf('href="/layout.css"'),'layout.css loads after style.css');
+assert.doesNotMatch(html,/\sstyle=/,'no inline style attributes (CSP style-src self)');
+for (const id of ['composer','prompt','send','cancel','model','agent','speak','files','record','attachments','approvals','messages','run-status','conversation-list','conversation-title','new-chat','rename-chat','delete-chat','export','auth-form','token','clear-token','theme','notice','storage-warning','chat-page','management-page','page-title','page-status','refresh-page','management-content','refresh-models','speech-player'])
+  assert.equal(html.split(`id="${id}"`).length,2,`exactly one #${id}`);
+assert.equal(html.match(/<h1[\s>]/g).length,1);
+const tag = id => html.match(new RegExp(`<[a-z]+ id="${id}"[^>]*>`))[0];
+assert.match(tag('send'),/class="button-primary"/); assert.match(tag('delete-chat'),/class="button-danger"/);
+for (const id of ['theme','refresh-models','clear-token','export']) assert.match(tag(id),/class="button-quiet"/,id);
+assert.match(html,/<button class="button-primary" type="submit">Save token<\/button>/);
+// Send is the last control of the composer action row, Cancel directly before it.
+assert.match(html,/<div class="composer-submit"><button id="cancel"[^>]*>Cancel<\/button><button id="send"[^>]*>Send<\/button><\/div><\/div>/);
+assert(html.indexOf('class="composer-options"') < html.indexOf('class="composer-actions"'));
+// The approval rule moved into each approval card; the composer hint keeps the limits.
+assert.doesNotMatch(html,/applies only to identical calls/); assert.match(source,/Agent approval “Always” applies only to identical calls in this run\./);
+assert.match(html,/Attachments: at most 4 MiB total per turn\. Full conversation requests must fit 6 MiB\./);
+// Success notes are info, failures default to error; metadata is dt/dd, not dot-joined sentences.
+assert.match(source,/const notice = \(text, kind = 'error'\) => \{[^}]*dataset\.kind = kind/);
+for (const text of ['Code copied.','Token saved for this tab.','Token cleared.']) assert.match(source,new RegExp(`notice\\('${text.replace('.','\\.')}', 'info'\\)`),text);
+assert.doesNotMatch(source,/version \$\{item\.version\} ·|Task: \$\{item\.task\} ·|Plugin: \$\{item\.plugin\} ·|: \$\{p\.state\} ·/);
+assert.match(source,/el\('footer', undefined, 'message-meta'\)/); assert.match(source,/'conversation-item selected' : 'conversation-item'/);
+// layout.css: placement only, one breakpoint, tokens with literal fallbacks, no visual reordering.
+assert.deepEqual([...new Set(layout.match(/@media[^{]+/g).map(s => s.trim()))],['@media (max-width: 760px)']);
+assert.doesNotMatch(layout,/var\(--[a-z0-9-]+\)/,'every token has a fallback');
+assert.doesNotMatch(layout,/(^|[\s;{])order\s*:/,'no CSS order: DOM order is visual order');
+assert.doesNotMatch(layout,/(^|[\s;{])(color|background|border-color|font|box-shadow|border-radius)\s*:/m,'visual properties belong to style.css');
+console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, generation stats and layout structure passed.');

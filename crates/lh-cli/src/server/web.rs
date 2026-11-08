@@ -26,6 +26,10 @@ pub(super) fn asset(method: &Method, path: &str) -> Option<Reply> {
             include_str!("../../web/style.css"),
             "text/css; charset=utf-8",
         ),
+        "/layout.css" => (
+            include_str!("../../web/layout.css"),
+            "text/css; charset=utf-8",
+        ),
         _ => return None,
     };
     let allowed = method == Method::GET || method == Method::HEAD;

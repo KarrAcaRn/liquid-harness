@@ -1,0 +1,160 @@
+/* Layout and placement only (docs/WEB-UI-PLAN.md sections 4 and 6).
+   Colours, borders, radii, fonts, shadows and component padding live in style.css,
+   which loads first. This file wins over the legacy layout block at the end of
+   style.css and resets legacy properties the target structure does not want.
+   Tokens are consumed with literal fallbacks; single breakpoint: 760px. */
+
+/* App shell: header row (brand, nav, theme), connection strip, notices, view. */
+.app-header, .connection, .notices, main { width: 100%; max-width: 1440px; margin: 0 auto; }
+.app-header, .connection, .notices { flex-shrink: 0; }
+.app-header {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--space-2, .5rem) var(--space-5, 1.5rem);
+  padding: var(--space-3, .75rem) var(--space-5, 1.5rem);
+}
+.brand { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-3, .75rem); min-width: 0; }
+.brand h1 { margin: 0; }
+.app-nav {
+  display: flex; align-items: center; gap: var(--space-1, .25rem);
+  max-width: none; margin: 0; padding: 0; border-bottom: 0; min-width: 0;
+}
+.app-nav a { display: inline-flex; align-items: center; min-height: 40px; white-space: nowrap; }
+.app-header #theme { margin-left: auto; }
+
+.connection { padding: var(--space-1, .25rem) var(--space-5, 1.5rem); }
+.connection form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); margin-top: var(--space-2, .5rem); }
+.connection p { margin: var(--space-2, .5rem) 0; }
+
+.notices { display: flex; flex-direction: column; gap: var(--space-2, .5rem); padding: 0 var(--space-5, 1.5rem); }
+.notices > #notice, .notices > #storage-warning { max-width: none; margin: 0; }
+
+main { padding: var(--space-4, 1rem) var(--space-5, 1.5rem) var(--space-5, 1.5rem); }
+
+/* Chat view fills the viewport: only #messages (and a long sidebar list) scroll.
+   If the minimum sizes do not fit (very small screens), the document scrolls. */
+body[data-page=chat] { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+#chat-page {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 15rem minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+  gap: var(--space-5, 1.5rem);
+}
+
+.conversations {
+  display: flex; flex-direction: column; gap: var(--space-3, .75rem);
+  min-height: 0; border-right: 0; padding: 0;
+}
+.sidebar-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2, .5rem); }
+.sidebar-header h2 { margin: 0; }
+/* Padding keeps focus rings of the items inside the scroll box visible. */
+#conversation-list {
+  display: flex; flex-direction: column; gap: var(--space-2, .5rem);
+  flex: 0 1 auto; min-height: 0; max-height: none; overflow: auto;
+  margin: 0; padding: var(--space-2, .5rem);
+}
+.conversation-item { width: 100%; }
+.sidebar-footer { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2, .5rem); }
+.sidebar-footer p { margin: 0; }
+
+.chat-main { display: flex; flex-direction: column; gap: var(--space-2, .5rem); min-width: 0; min-height: 0; }
+.conversation-header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); flex-shrink: 0; }
+.conversation-header h2 { flex: 1 1 12rem; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.conversation-actions { display: flex; flex-wrap: nowrap; gap: var(--space-2, .5rem); }
+
+#messages {
+  display: flex; flex-direction: column; gap: var(--space-4, 1rem);
+  flex: 1 1 0; min-height: 10rem; max-height: none; overflow: auto;
+  padding: var(--space-2, .5rem);
+}
+#approvals { flex: 0 1 auto; min-height: 0; overflow: auto; }
+#approvals:empty { display: none; }
+.approval-actions { margin: var(--space-3, .75rem) 0 0; }
+#run-status { flex-shrink: 0; margin: 0; }
+
+#composer { display: flex; flex-direction: column; gap: var(--space-2, .5rem); flex-shrink: 0; padding-top: var(--space-3, .75rem); }
+#composer > label, #composer > p { margin: 0; }
+/* Previews scroll inside a bounded box so the composer never pushes Send off-screen. */
+#attachments { display: flex; flex-wrap: wrap; gap: var(--space-3, .75rem); max-height: 8rem; overflow: auto; padding: var(--space-2, .5rem); }
+#attachments:empty { display: none; }
+.composer-options, .composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); }
+.composer-model, .composer-media, .composer-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
+.check { display: inline-flex; align-items: center; gap: var(--space-2, .5rem); }
+.file-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
+.file-label input { display: inline-block; max-width: 100%; }
+/* Send is the trailing control; Cancel sits directly before it. */
+.composer-submit { flex-wrap: nowrap; margin-left: auto; }
+#speech-player { flex-shrink: 0; }
+
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); margin: var(--space-2, .5rem) 0; }
+
+/* Management views: page header, sections, card grid. */
+.page-header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); }
+.page-header h2 { margin: 0; }
+.page-header #page-status { flex: 1 1 16rem; margin: 0; }
+#management-content { display: flex; flex-direction: column; gap: var(--space-5, 1.5rem); margin-top: var(--space-5, 1.5rem); }
+#management-content > .panel { margin: 0; }
+#management-content .panel > h3 { margin-top: 0; }
+.card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
+  gap: var(--space-4, 1rem); align-items: start; margin: var(--space-3, .75rem) 0;
+}
+.card-grid > .card { margin: 0; min-width: 0; }
+/* Name left, state badges right: both always start on the card's first row. */
+.card-header { display: flex; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2, .5rem); }
+.card-header h4 { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.card-header .badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1, .25rem); max-width: 60%; }
+/* Long paths and JSON in metadata wrap inside the card instead of widening the page. */
+.panel dd { min-width: 0; overflow-wrap: anywhere; }
+/* Key/value grid placement only; dt/dd typography and colour belong to style.css. */
+dl.meta { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1, .25rem) var(--space-3, .75rem); margin: var(--space-3, .75rem) 0; }
+dl.meta dt, dl.meta dd { margin: 0; }
+dl.meta .wide { grid-column: 1 / -1; }
+dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
+.card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2, .5rem); margin: var(--space-3, .75rem) 0; }
+.meta-block h4 { margin: var(--space-4, 1rem) 0 var(--space-2, .5rem); }
+
+@media (max-width: 760px) {
+  /* Row 1: brand + theme toggle; row 2: the nav. It wraps instead of scrolling so
+     focus rings are never clipped by a scroll box (one row down to ~350px). */
+  .app-header {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "brand theme" "nav nav";
+    gap: var(--space-1, .25rem) var(--space-2, .5rem); padding: var(--space-2, .5rem) var(--space-3, .75rem) 0;
+  }
+  .brand { grid-area: brand; }
+  .brand .subtitle { display: none; }
+  .app-header #theme { grid-area: theme; margin: 0; }
+  .app-nav { grid-area: nav; flex-wrap: wrap; overflow: visible; padding: var(--space-1, .25rem) 0; }
+  .app-nav a { min-height: 44px; }
+  .connection { padding: 0 var(--space-3, .75rem); }
+  .notices { padding: 0 var(--space-3, .75rem); }
+  main { padding: var(--space-2, .5rem) var(--space-3, .75rem) var(--space-3, .75rem); }
+
+  #chat-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--space-2, .5rem); }
+  /* Compact strip in DOM order: heading + New conversation, then the list and Export. */
+  .conversations {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: var(--space-1, .25rem) var(--space-2, .5rem); padding: 0 0 var(--space-2, .5rem);
+  }
+  .sidebar-header { grid-column: 1 / -1; flex-wrap: nowrap; }
+  #conversation-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; }
+  .conversation-item { flex: 0 0 auto; width: auto; max-width: 12.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sidebar-footer p { display: none; }
+
+  #messages { min-height: 120px; }
+  /* Tighter rhythm so textarea and Send fit a 390x844 screen with 44px targets. */
+  .chat-main, #composer { gap: var(--space-1, .25rem); }
+  .composer-options, .composer-actions { gap: var(--space-1, .25rem) var(--space-2, .5rem); }
+  .check { gap: var(--space-1, .25rem); } /* lets Agent mode and Speak replies share a row at 390px */
+  /* "Message" stays the textarea's accessible name; the placeholder labels it visually. */
+  #composer > label[for=prompt] { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #prompt { height: 4.5rem; min-height: 4.5rem; }
+  #attachments { max-height: 6rem; }
+  /* Model select shrinks so Refresh models stays on its row. */
+  .composer-model { flex-wrap: nowrap; width: 100%; }
+  .composer-model select { flex: 1 1 auto; min-width: 0; }
+  .composer-model button { flex-shrink: 0; }
+  .conversation-header { flex-wrap: nowrap; }
+  .conversation-header h2 { flex: 1 1 0; }
+  /* Record audio shares the row with Cancel and Send (DOM order unchanged). */
+  .composer-media { display: contents; }
+}
