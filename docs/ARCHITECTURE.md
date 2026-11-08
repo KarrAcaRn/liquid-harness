@@ -719,9 +719,35 @@ value unchanged; returns `{value, persisted}`) and
 `boot()` before the first conversation is created. Contract for chat creation:
 call `settings.defaultContextForNewChat()` once when a conversation is created
 and snapshot the result into it: the trimmed text, or `''` meaning add nothing;
-a later save never touches existing conversations. (The chat-side snapshot and
-its use in model requests are a separate change; until then the setting is
-stored and editable but not yet applied.)
+a later save never touches existing conversations.
+
+### Default context in conversations
+
+Every conversation is created by `fresh()` (first boot with no conversations,
+"New chat", deleting the last conversation) through the exported pure
+`newConversation(id, settings.defaultContextForNewChat())`, which snapshots the
+text as `defaultContext` on the conversation (`''` = none). It is persisted with
+the conversation in `lh.conversations` (and exported), so reloads and restarts
+keep it; nothing ever reassigns it, so later Options saves only affect
+conversations created afterwards. Conversations from before this feature have
+no field and get no context (`conversationContext(c)` treats a missing or
+non-string value as `''`).
+
+The snapshot is instruction text, not a chat turn: it is never stored in
+`history`/`messages`. `send()` builds `messages` with
+`requestMessages(context, history)`, which prepends one `{role:"system"}`
+message and keeps the history unchanged, including any system or chat-specific
+context messages already in it. The agent loop then adds its own tool/skill
+system message before it, so both instructions reach the model. Agent runs
+return `lh_messages`, which echo the request; `historyWithoutContext()` removes
+the leading context message before the history is stored, and
+`requestMessages()` does not prefix a history that already starts with it, so
+the context is sent exactly once per request. The chat view shows the snapshot
+as a quiet "Default context of this conversation" disclosure.
+
+The text only asks the model to behave in a certain way; it does not add tools
+(no web search or file access unless the selected specialist offers them) and
+does not guarantee tool use or factual correctness.
 
 ## 9. Configuration
 ### Agent execution and management (M4b)

@@ -35,6 +35,33 @@ export function resolveSpeakSelection(selection, available) {
   if (selection === true && available.length === 1) return available[0];
   return null;
 }
+// Default context (docs/ARCHITECTURE.md "Default context in conversations"). Every new
+// conversation is created here: `contextText` is read once, at creation, from
+// settings.defaultContextForNewChat() and snapshotted as `defaultContext` ('' = none).
+// Later option changes never touch an existing conversation.
+export function newConversation(id, contextText) {
+  return { id, title: 'New conversation', messages: [], history: [], defaultContext: typeof contextText === 'string' ? contextText.trim() : '' };
+}
+// The snapshot of a conversation; conversations from before this feature (no field)
+// or with an invalid value have none.
+export function conversationContext(conversation) {
+  const text = conversation?.defaultContext;
+  return typeof text === 'string' ? text.trim() : '';
+}
+const isContextMessage = (message, context) => message?.role === 'system' && message.content === context;
+// Messages for a model request: the snapshot as one leading system message, then the
+// conversation history unchanged (other system/context messages are kept). The context
+// is never stored in history, and a history that already starts with it is not
+// prefixed again, so it is sent exactly once per request.
+export function requestMessages(context, history) {
+  if (!context || isContextMessage(history[0], context)) return [...history];
+  return [{ role: 'system', content: context }, ...history];
+}
+// Inverse for histories returned by the server (agent `lh_messages` echoes the request):
+// drops the leading context message so it is not stored and later sent twice.
+export function historyWithoutContext(context, messages) {
+  return context && isContextMessage(messages[0], context) ? messages.slice(1) : [...messages];
+}
 // Handles UTF-8 split across chunks, CR/LF/CRLF, comments and multiline data.
 export async function readSSE(body, onEvent) {
   if (!body) throw new Error('The server returned no stream.');
@@ -134,7 +161,8 @@ function boot() {
   function fresh() {
     if (!canChangeConversation()) return;
     const id = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2,'0')).join('');
-    const c = { id, title: 'New conversation', messages: [], history: [] }; conversations.unshift(c); selected = c.id; persist(); render();
+    // The only creation path (boot, New chat, deleting the last chat): snapshot the option now.
+    const c = newConversation(id, settings.defaultContextForNewChat()); conversations.unshift(c); selected = c.id; persist(); render();
   }
   function jsonDetails(title, value, cls = 'raw-json') { const d = el('details', undefined, cls || undefined); d.append(el('summary', title), el('pre', JSON.stringify(value,null,2))); return d; }
   // Key/value metadata: one dt/dd pair per field; empty values read "none", never a dangling label.
@@ -176,8 +204,11 @@ function boot() {
     const box = $('messages');
     const follow = box.scrollHeight - box.scrollTop - box.clientHeight < 100;
     const opened = [...box.querySelectorAll('details')].map(d => d.open);
-    const shown = current()?.messages || [];
-    box.replaceChildren(...(shown.length ? shown.map(renderMessage) : [el('p', 'No messages yet.', 'hint muted empty-state')]));
+    const shown = current()?.messages || [], context = conversationContext(current());
+    const items = shown.length ? shown.map(renderMessage) : [el('p', 'No messages yet.', 'hint muted empty-state')];
+    // The snapshot is sent as a system message, not shown as a chat turn: a quiet disclosure only.
+    if (context) { const d = el('details', undefined, 'raw-json conversation-context'); d.append(el('summary', 'Default context of this conversation'), el('pre', context)); items.unshift(d); }
+    box.replaceChildren(...items);
     [...box.querySelectorAll('details')].forEach((d,i) => { d.open = Boolean(opened[i]); });
     if (follow) box.scrollTop = box.scrollHeight;
     renderStats(shown);
@@ -278,7 +309,8 @@ function boot() {
     const c = current(), agent = $('agent').checked;
     const user = {role:'user', content: attachments.length ? [...(text ? [{type:'text',text}] : []),...attachments.map(a => a.part)] : text};
     const history = [...(c.history || c.messages.filter(m => !m.error).map(({role,content}) => ({role,content}))), user];
-    const payload = {model:$('model').value || 'auto',messages:history}; if (!agent) payload.stream = true;
+    const context = conversationContext(c);
+    const payload = {model:$('model').value || 'auto',messages:requestMessages(context,history)}; if (!agent) payload.stream = true;
     try { requestBody(payload); } catch (error) { report(error); return; }
     const answer = {role:'assistant',content:'',events:[],pending:true,stats:startStats()}; c.messages.push(user,answer); c.history = history;
     if (c.title === 'New conversation') c.title = text.slice(0,60) || 'Media conversation';
@@ -320,7 +352,7 @@ function boot() {
       });
       if (streamError) throw new Error(streamError);
       if (!done) throw new Error('Connection ended before completion. Partial response retained; it is not included in follow-up context.');
-      c.history = [...(Array.isArray(savedHistory) ? savedHistory : history), responseMessage || {role:'assistant',content:answer.content}];
+      c.history = [...(Array.isArray(savedHistory) ? historyWithoutContext(context,savedHistory) : history), responseMessage || {role:'assistant',content:answer.content}];
       answer.stats = completeStats(answer.stats, finalStats);
       $('run-status').textContent = `Complete${answer.steps !== undefined ? ` · ${answer.steps} steps` : ''}`;
     } catch (error) {

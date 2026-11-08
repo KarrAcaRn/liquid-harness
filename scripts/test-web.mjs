@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,newConversation,conversationContext,requestMessages,historyWithoutContext} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
@@ -246,4 +246,60 @@ assert.match(source,/const settings = createSettings\(browserStorage\);\n\s*if \
 assert(source.indexOf('settings.init()') < source.indexOf("if (!conversations.length) fresh();"),'options initialize before the first conversation is created');
 assert.match(source,/\['plugins','tools','skills','status','options'\]/); assert.match(source,/if \(page === 'options'\) \{ loadOptions\(\); return; \}/);
 assert.match(source,/settings\.saveDefaultContext\(\$\('default-context'\)\.value\)/);
-console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, speak ID selection, generation stats, layout structure and default-context options passed.');
+// Default context in conversations: snapshot at creation, kept across reloads, sent once.
+{ // Snapshot: a conversation keeps the text valid at its creation; later saves affect only new ones.
+  const storage = new MemoryStorage(), settings = createSettings(storage); settings.init();
+  const first = newConversation('a', settings.defaultContextForNewChat());
+  assert.deepEqual(first,{id:'a',title:'New conversation',messages:[],history:[],defaultContext:SUGGESTED_DEFAULT_CONTEXT});
+  settings.saveDefaultContext('  Antworte auf Deutsch.  ');
+  const second = newConversation('b', settings.defaultContextForNewChat());
+  assert.equal(conversationContext(first),SUGGESTED_DEFAULT_CONTEXT); assert.equal(conversationContext(second),'Antworte auf Deutsch.');
+  settings.saveDefaultContext('');
+  const third = newConversation('c', settings.defaultContextForNewChat());
+  assert.equal(third.defaultContext,''); assert.equal(conversationContext(first),SUGGESTED_DEFAULT_CONTEXT); assert.equal(conversationContext(second),'Antworte auf Deutsch.');
+  // Reload (lh.conversations JSON round trip, new settings over the same storage): snapshots survive unchanged.
+  storage.setItem('lh.conversations',JSON.stringify([third,second,first]));
+  const restarted = createSettings(storage); restarted.init(); restarted.saveDefaultContext('Neu nach dem Neustart.');
+  const [r3,r2,r1] = JSON.parse(storage.getItem('lh.conversations'));
+  assert.equal(conversationContext(r1),SUGGESTED_DEFAULT_CONTEXT); assert.equal(conversationContext(r2),'Antworte auf Deutsch.'); assert.equal(conversationContext(r3),'');
+  assert.equal(conversationContext(newConversation('d', restarted.defaultContextForNewChat())),'Neu nach dem Neustart.');
+}
+{ // Model requests: one leading system message; empty context or older conversations add nothing.
+  const user = {role:'user',content:'Wie hoch ist der Mount Everest?'};
+  assert.deepEqual(requestMessages('Erfinde nichts.',[user]),[{role:'system',content:'Erfinde nichts.'},user]);
+  assert.deepEqual(requestMessages('',[user]),[user]);
+  for (const old of [{id:'x',title:'t',messages:[]},{id:'y',title:'t',messages:[],defaultContext:42},null]) {
+    assert.equal(conversationContext(old),''); assert.deepEqual(requestMessages(conversationContext(old),[user]),[user]);
+  }
+  // Existing system instructions and chat context stay, after the default context.
+  const existing = [{role:'system',content:'Du bist ein Spielleiter.'},user];
+  assert.deepEqual(requestMessages('Erfinde nichts.',existing),[{role:'system',content:'Erfinde nichts.'},...existing]);
+  // The input history is not mutated (the snapshot never becomes a stored chat turn).
+  const history = [user]; requestMessages('Erfinde nichts.',history); assert.deepEqual(history,[user]);
+}
+{ // No duplicates over repeated requests, including agent runs whose lh_messages echo the request.
+  const c = newConversation('a','Erfinde nichts.'), context = conversationContext(c);
+  let history = [];
+  for (let turn = 1; turn <= 3; turn++) {
+    const sent = requestMessages(context,[...history,{role:'user',content:`Frage ${turn}`}]);
+    assert.equal(sent.filter(m => m.role === 'system' && m.content === context).length,1,`turn ${turn}`);
+    assert.deepEqual(sent[0],{role:'system',content:context});
+    const lhMessages = turn % 2 ? sent : sent.slice(1); // Agent (echo incl. context) and chat (client history) turns.
+    history = [...historyWithoutContext(context,lhMessages),{role:'assistant',content:`Antwort ${turn}`}];
+    assert(!history.some(m => m.role === 'system'),'context is never stored in history');
+  }
+  assert.equal(history.length,6);
+  // A history already starting with the context is not prefixed again; other system messages are not stripped.
+  assert.equal(requestMessages(context,[{role:'system',content:context}]).length,1);
+  assert.deepEqual(historyWithoutContext(context,[{role:'system',content:'anders'}]),[{role:'system',content:'anders'}]);
+  assert.deepEqual(historyWithoutContext('',[{role:'system',content:''}]),[{role:'system',content:''}]);
+}
+// app.mjs wiring: fresh() is the only creation path and snapshots via settings; send() uses the snapshot.
+assert.equal(source.match(/title: 'New conversation', messages: \[\]/g).length,1,'conversation literal only in newConversation');
+assert.match(source,/const c = newConversation\(id, settings\.defaultContextForNewChat\(\)\);/);
+assert.equal(source.match(/newConversation\(/g).length,2,'one definition, one call (fresh)');
+for (const caller of ["if (!conversations.length) fresh();","$('new-chat').addEventListener('click',fresh);","if (!selected) fresh();"]) assert(source.includes(caller),caller);
+assert.match(source,/const context = conversationContext\(c\);\n\s*const payload = \{model:\$\('model'\)\.value \|\| 'auto',messages:requestMessages\(context,history\)\}/);
+assert.match(source,/historyWithoutContext\(context,savedHistory\)/);
+assert.doesNotMatch(source,/defaultContext\s*=/,'existing conversations are never reassigned a context');
+console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, speak ID selection, generation stats, layout structure, default-context options and conversation snapshots passed.');
