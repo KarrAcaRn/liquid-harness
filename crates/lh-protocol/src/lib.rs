@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 pub use toml;
 pub mod chat;
 mod sse;
+pub mod stats;
 pub use chat::*;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

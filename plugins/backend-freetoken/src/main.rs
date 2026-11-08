@@ -582,9 +582,11 @@ fn chat(
     if !choice["message"].is_object() {
         return Err(failed("missing chat choice/message"));
     }
-    Ok(
-        json!({"message":choice["message"],"finish_reason":choice["finish_reason"],"usage":value["usage"]}),
-    )
+    let mut result = json!({"message":choice["message"],"finish_reason":choice["finish_reason"],"usage":value["usage"]});
+    if value["timings"].is_object() {
+        result["timings"] = value["timings"].clone();
+    }
+    Ok(result)
 }
 fn main() -> std::io::Result<()> {
     lh_plugin_sdk::serve(Backend::default())

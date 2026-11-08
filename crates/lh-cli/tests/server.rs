@@ -195,6 +195,7 @@ fn embedded_ui_is_public_but_api_remains_authenticated() {
         ("/index.html", "text/html", "id=\"composer\""),
         ("/app.mjs", "text/javascript", "readSSE"),
         ("/markdown.mjs", "text/javascript", "escapeHTML"),
+        ("/stats.mjs", "text/javascript", "normalizeStats"),
         ("/style.css", "text/css", "prefers-color-scheme"),
     ] {
         let (status, headers, body) = server.request("GET", path, b"", "", None);
@@ -603,6 +604,83 @@ fn concurrent_streams_do_not_cross_contaminate() {
             });
         }
     });
+}
+
+/// Final SSE chunk (`lh.stats`, `usage`) of a streaming chat completion.
+fn final_stream_chunk(server: &Server, extra: Value) -> Value {
+    let mut request = json!({"model":"mock-text","stream":true,"messages":[{"role":"user","content":"count these tokens"}]});
+    for (key, value) in extra.as_object().unwrap() {
+        request[key] = value.clone();
+    }
+    let (status, _, body) = server.post("/v1/chat/completions", request);
+    assert_eq!(status, 200);
+    let chunks: Vec<Value> = String::from_utf8(body)
+        .unwrap()
+        .lines()
+        .filter_map(|s| s.strip_prefix("data: "))
+        .filter(|s| *s != "[DONE]")
+        .map(|s| json::from_str(s).unwrap())
+        .collect();
+    // Only the finish chunk carries statistics; deltas never do.
+    assert!(
+        chunks[..chunks.len() - 1]
+            .iter()
+            .all(|c| c["lh"].get("stats").is_none())
+    );
+    let last = chunks.last().unwrap().clone();
+    assert_eq!(last["choices"][0]["finish_reason"], "stop");
+    last
+}
+
+#[test]
+fn chat_reports_generation_stats() {
+    let server = Server::start(false);
+    // Backend timings (llama.cpp shape) define the decode-phase rate.
+    let last = final_stream_chunk(
+        &server,
+        json!({"mock_usage":{"prompt_tokens":4,"completion_tokens":30,"total_tokens":34},"mock_timings":{"prompt_n":4,"prompt_ms":10.0,"predicted_n":30,"predicted_ms":1500.0}}),
+    );
+    let stats = &last["lh"]["stats"];
+    assert_eq!(stats["completion_tokens"], 30);
+    assert_eq!(stats["prompt_tokens"], 4);
+    assert_eq!(stats["tokens_per_second"], 20.0);
+    assert_eq!(stats["rate_source"], "backend_timings");
+    assert_eq!(stats["rate_window_ms"], 1500.0);
+    assert!(stats["elapsed_ms"].as_f64().unwrap() >= 0.0);
+    assert!(stats["first_delta_ms"].as_f64().unwrap() >= 0.0);
+    assert_eq!(last["usage"]["completion_tokens"], 30);
+    // Usage without timings: harness window between first and last delta.
+    let last = final_stream_chunk(
+        &server,
+        json!({"mock_usage":{"completion_tokens":9},"mock_delta_delay_ms":40}),
+    );
+    let stats = &last["lh"]["stats"];
+    assert_eq!(stats["rate_source"], "harness_stream");
+    let window = stats["rate_window_ms"].as_f64().unwrap();
+    assert!(window >= 50.0, "{stats}");
+    let rate = stats["tokens_per_second"].as_f64().unwrap();
+    assert!((rate - 8000.0 / window).abs() < 1e-6, "{stats}");
+    // Nothing reported: counts and rate are explicitly null, never estimated.
+    let last = final_stream_chunk(&server, json!({}));
+    let stats = &last["lh"]["stats"];
+    for field in [
+        "completion_tokens",
+        "prompt_tokens",
+        "tokens_per_second",
+        "rate_source",
+        "rate_window_ms",
+    ] {
+        assert!(stats[field].is_null(), "{field}: {stats}");
+    }
+    assert!(stats["elapsed_ms"].is_number());
+    assert!(last.get("usage").is_none());
+    // Non-streaming responses carry the same object (no delta window).
+    let (status, _, body) = server.post("/v1/chat/completions", json!({"model":"mock-text","messages":[{"role":"user","content":"hi"}],"mock_timings":{"predicted_n":8,"predicted_ms":400.0}}));
+    assert_eq!(status, 200);
+    let stats = &json::from_slice::<Value>(&body).unwrap()["lh"]["stats"];
+    assert_eq!(stats["completion_tokens"], 8);
+    assert_eq!(stats["tokens_per_second"], 20.0);
+    assert!(stats["first_delta_ms"].is_null());
 }
 
 #[test]

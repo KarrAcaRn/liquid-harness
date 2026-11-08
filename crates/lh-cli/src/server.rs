@@ -188,9 +188,11 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
             crate::conversation::complete(&mut engine, messages, &model, None, json!(params), None)
                 .await
                 .map_err(backend)?;
+        let mut lh = json!(route);
+        lh["stats"] = response["lh_stats"].clone();
         return Ok(routed(
             json_response(
-                json!({"id":id,"object":"chat.completion","created":created(),"model":route.specialist,"choices":[{"index":0,"message":response["message"],"finish_reason":response["finish_reason"]}],"usage":response["usage"],"lh":route}),
+                json!({"id":id,"object":"chat.completion","created":created(),"model":route.specialist,"choices":[{"index":0,"message":response["message"],"finish_reason":response["finish_reason"]}],"usage":response["usage"],"lh":lh}),
             ),
             &route,
         ));
@@ -239,6 +241,10 @@ async fn chat(state: State, value: Value) -> ApiResult<Reply> {
                 let mut value = route_chunk(json!({}), response["finish_reason"].clone());
                 // Keep the input routing explanation, add the executed backend.
                 value["lh"]["backend"] = json!(loaded_route.backend);
+                value["lh"]["stats"] = response["lh_stats"].clone();
+                if response["usage"].as_object().is_some_and(|u| !u.is_empty()) {
+                    value["usage"] = response["usage"].clone();
+                }
                 value
             }
             Err(error) => json!({"error":{"message":error.to_string(),"type":"server_error"}}),

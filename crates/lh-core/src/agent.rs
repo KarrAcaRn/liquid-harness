@@ -317,6 +317,9 @@ async fn run_inner(
                 .ok_or_else(|| Error::new(-32602, "agent backend not loaded"))?,
         )?;
         let mut notifications = host.subscribe();
+        let started = std::time::Instant::now();
+        let ms = |at: std::time::Instant| at.duration_since(started).as_secs_f64() * 1000.0;
+        let mut timing = lh_protocol::stats::CallTiming::default();
         let (mut response, streamed) = {
             let request = engine.dispatch(
                 decision,
@@ -330,6 +333,8 @@ async fn run_inner(
                     notification=notifications.recv(),if stream_error.is_none()=>{
                         let notification=match notification {Ok(n)=>n,Err(e)=>{stream_error=Some(Error::new(-32603,e.to_string()));continue;}};
                         if notification.method=="$/stream" && let Some(text)=notification.params["delta"]["content"].as_str().filter(|s|!s.is_empty()) {
+                            let now=Some(ms(std::time::Instant::now()));
+                            timing.first_delta_ms=timing.first_delta_ms.or(now);timing.last_delta_ms=now;
                             streamed=true;emit(events,"delta",json!({"content":text,"step":step}));
                         }
                     },
@@ -342,6 +347,7 @@ async fn run_inner(
             }
             (response, streamed)
         };
+        let elapsed_ms = ms(std::time::Instant::now());
         if control.is_cancelled() {
             return Err(Error::new(-32004, "agent cancelled"));
         }
@@ -359,6 +365,9 @@ async fn run_inner(
         if calls.is_empty() {
             response["lh_messages"] = json!(&messages[1..]);
             response["steps"] = json!(step);
+            // Statistics describe this final model call, not the whole tool loop.
+            timing.elapsed_ms = Some(elapsed_ms);
+            response["lh_stats"] = lh_protocol::stats::generation_stats(&response, timing);
             emit(events, "done", json!({"response":response,"steps":step}));
             return Ok(response);
         }

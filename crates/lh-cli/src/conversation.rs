@@ -204,6 +204,9 @@ pub async fn complete_control(
         engine.load_specialist(&mut execution).await?
     };
     let mut notifications = chat_host.subscribe();
+    let started = std::time::Instant::now();
+    let ms = |at: std::time::Instant| at.duration_since(started).as_secs_f64() * 1000.0;
+    let mut timing = lh_protocol::stats::CallTiming::default();
     let call = engine.dispatch(
         &execution,
         json!({"messages":adapted,"tools":tools,"params":sampling,"stream":deltas.is_some()}),
@@ -217,12 +220,17 @@ pub async fn complete_control(
                 let notification = notification.map_err(|e| format!("lost chat stream: {e}"))?;
                 if notification.method == "$/stream" {
                     emitted = true;
+                    let now = Some(ms(std::time::Instant::now()));
+                    timing.first_delta_ms = timing.first_delta_ms.or(now);
+                    timing.last_delta_ms = now;
                     if let Some(tx) = &deltas { let _ = tx.send(notification.params["delta"].clone()); }
                 }
             }
             result = &mut call => break result?,
         }
     };
+    timing.elapsed_ms = Some(ms(std::time::Instant::now()));
+    response["lh_stats"] = lh_protocol::stats::generation_stats(&response, timing);
     if !emitted && let Some(tx) = &deltas {
         let _ = tx.send(response["message"].clone());
     }

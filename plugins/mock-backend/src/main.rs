@@ -129,7 +129,12 @@ impl Handler for Mock {
                     };
                     if params["stream"] == true {
                         let chars: Vec<char> = text.chars().collect();
+                        // Test hook: spacing deltas exercises harness-measured rates.
+                        let delay = params["params"]["mock_delta_delay_ms"].as_u64();
                         for i in 0..3 {
+                            if let Some(ms) = delay.filter(|_| i > 0) {
+                                std::thread::sleep(std::time::Duration::from_millis(ms));
+                            }
                             let chunk: String = chars
                                 [chars.len() * i / 3..chars.len() * (i + 1) / 3]
                                 .iter()
@@ -138,9 +143,13 @@ impl Handler for Mock {
                                 .map_err(|e| error(e.to_string()))?;
                         }
                     }
-                    return Ok(
-                        json!({"message":{"role":"assistant","content":text},"finish_reason":"stop","usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}),
-                    );
+                    // The mock counts no tokens. Tests may inject backend-reported
+                    // usage/timings; otherwise usage is empty (not reported).
+                    let mut result = json!({"message":{"role":"assistant","content":text},"finish_reason":"stop","usage":params["params"].get("mock_usage").cloned().unwrap_or(json!({}))});
+                    if let Some(timings) = params["params"].get("mock_timings") {
+                        result["timings"] = timings.clone();
+                    }
+                    return Ok(result);
                 }
                 self.decide_calls += 1;
                 let request: DecideRequest =

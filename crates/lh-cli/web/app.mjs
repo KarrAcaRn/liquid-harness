@@ -1,4 +1,5 @@
 import { renderMarkdown } from './markdown.mjs';
+import { startStats, completeStats, endStats, restoreStats } from './stats.mjs';
 
 export const MAX_BODY = 6 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 4 * 1024 * 1024;
@@ -73,6 +74,7 @@ function boot() {
       if (!Array.isArray(saved) || !saved.every(c => typeof c.id === 'string' && typeof c.title === 'string' && Array.isArray(c.messages))) throw new Error('Invalid saved conversations');
       conversations = saved;
       for (const conversation of conversations) for (const message of conversation.messages) {
+        if (message.role === 'assistant' && 'stats' in message) message.stats = restoreStats(message.stats);
         if (message.pending) { message.error = 'Interrupted by a page reload. Partial response is not included in follow-up context.'; delete message.pending; }
       }
     }
@@ -205,11 +207,11 @@ function boot() {
     const history = [...(c.history || c.messages.filter(m => !m.error).map(({role,content}) => ({role,content}))), user];
     const payload = {model:$('model').value || 'auto',messages:history}; if (!agent) payload.stream = true;
     try { requestBody(payload); } catch (error) { report(error); return; }
-    const answer = {role:'assistant',content:'',events:[],pending:true}; c.messages.push(user,answer); c.history = history;
+    const answer = {role:'assistant',content:'',events:[],pending:true,stats:startStats()}; c.messages.push(user,answer); c.history = history;
     if (c.title === 'New conversation') c.title = text.slice(0,60) || 'Media conversation';
     const run = {controller:new AbortController(),id:null,agent,cancelled:false}; active = run;
     $('prompt').value = ''; attachments = []; renderAttachments(); busy(true); render(); persist(); $('run-status').textContent = 'Connecting…';
-    let done = false, responseMessage = null, savedHistory = null, streamError = null;
+    let done = false, responseMessage = null, savedHistory = null, streamError = null, finalStats = null;
     try {
       const response = await api(agent ? '/lh/v1/agent/runs' : '/v1/chat/completions',{value:payload,signal:run.controller.signal});
       run.id = response.headers.get('x-lh-run-id');
@@ -226,14 +228,14 @@ function boot() {
           else if (kind === 'approval_required') { answer.events.push(value); approval(run,data); }
           else if (kind === 'error') { streamError = data.message || JSON.stringify(data); answer.events.push(value); }
           else if (kind === 'done') {
-            done = true; answer.steps = data.steps ?? data.response?.steps; answer.response = data;
+            done = true; answer.steps = data.steps ?? data.response?.steps; answer.response = data; finalStats = data.response?.lh_stats ?? null;
             if (data.error) streamError = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
             if (data.response?.message) { responseMessage = data.response.message; if (typeof responseMessage.content === 'string') answer.content = responseMessage.content; savedHistory = data.response.lh_messages; }
           } else answer.events.push(value);
           $('run-status').textContent = `Agent ${kind} · step ${answer.steps ?? '—'}`;
         } else {
           if (value.error) streamError = value.error.message || JSON.stringify(value.error);
-          if (value.lh) answer.route = value.lh;
+          if (value.lh) { const { stats, ...route } = value.lh; answer.route = route; if (stats !== undefined) finalStats = stats; }
           for (const choice of value.choices || []) {
             const delta = choice.delta || {};
             if (typeof delta.content === 'string') answer.content += delta.content;
@@ -246,9 +248,11 @@ function boot() {
       if (streamError) throw new Error(streamError);
       if (!done) throw new Error('Connection ended before completion. Partial response retained; it is not included in follow-up context.');
       c.history = [...(Array.isArray(savedHistory) ? savedHistory : history), responseMessage || {role:'assistant',content:answer.content}];
+      answer.stats = completeStats(answer.stats, finalStats);
       $('run-status').textContent = `Complete${answer.steps !== undefined ? ` · ${answer.steps} steps` : ''}`;
     } catch (error) {
       answer.error = run.cancelled ? 'Cancelled. Partial response retained; not included in follow-up context.' : error.message;
+      answer.stats = endStats(answer.stats, run.cancelled ? 'cancelled' : 'error');
       // Keep the submitted user message, but never treat a partial answer as complete.
       c.history = history; report(new Error(answer.error)); $('run-status').textContent = run.cancelled ? 'Cancelled' : 'Request failed';
     } finally {

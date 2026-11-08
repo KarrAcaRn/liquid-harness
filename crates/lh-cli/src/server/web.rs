@@ -18,6 +18,10 @@ pub(super) fn asset(method: &Method, path: &str) -> Option<Reply> {
             include_str!("../../web/markdown.mjs"),
             "text/javascript; charset=utf-8",
         ),
+        "/stats.mjs" => (
+            include_str!("../../web/stats.mjs"),
+            "text/javascript; charset=utf-8",
+        ),
         "/style.css" => (
             include_str!("../../web/style.css"),
             "text/css; charset=utf-8",

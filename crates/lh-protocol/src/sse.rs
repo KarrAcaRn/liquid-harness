@@ -28,7 +28,9 @@ pub fn sse(
     let mut message = json!({"role":"assistant","content":null});
     let mut tools: BTreeMap<u64, Value> = BTreeMap::new();
     let mut finish = Value::Null;
-    let mut usage = json!({"prompt_tokens":0,"completion_tokens":0,"total_tokens":0});
+    // Empty means the backend reported no usage; zeros would look like real counts.
+    let mut usage = json!({});
+    let mut timings = Value::Null;
     let mut bytes = 0;
     const MAX: usize = 8 * 1024 * 1024;
     loop {
@@ -65,6 +67,10 @@ pub fn sse(
         }
         if chunk["usage"].is_object() {
             usage = chunk["usage"].clone();
+        }
+        // llama.cpp reports generation timings on its final chunk.
+        if chunk["timings"].is_object() {
+            timings = chunk["timings"].clone();
         }
         if let Some(choice) = chunk["choices"].as_array().and_then(|a| a.first()) {
             let delta = &choice["delta"];
@@ -108,5 +114,9 @@ pub fn sse(
     if !tools.is_empty() {
         message["tool_calls"] = json!(tools.into_values().collect::<Vec<_>>());
     }
-    Ok(json!({"message":message,"finish_reason":finish,"usage":usage}))
+    let mut result = json!({"message":message,"finish_reason":finish,"usage":usage});
+    if timings.is_object() {
+        result["timings"] = timings;
+    }
+    Ok(result)
 }

@@ -168,7 +168,7 @@ Streaming results are sent as notifications before the final response.
 | `shutdown` (notification)| –                                                         | – |
 | `backend/load`          | `{key, model: ModelSpec, pinned?: bool}`                    | `{key, ready: true, info}` |
 | `backend/unload`        | `{key}`                                                     | `{}` |
-| `backend/chat`          | `{key, messages, tools?, params, stream: bool}`             | `{message, finish_reason, usage}` |
+| `backend/chat`          | `{key, messages, tools?, params, stream: bool}`             | `{message, finish_reason, usage, timings?}` |
 | `backend/transcribe`    | `{key, audio: local-path-or-data-URL, language?}`           | `{text, language?}` |
 | `backend/speak`         | `{key, text, voice?, language?}`                           | `{audio: WAV-path-or-data-URL, sample_rate, duration_ms}` |
 | `backend/decide`        | `{key, state, images?, files?, questions}`                  | `{answers}` (d1 `/v1/systemone` shape) |
@@ -348,7 +348,9 @@ configure the actual llama-server binary, not a daemonizing wrapper. Port
 selection releases an ephemeral listener before spawning; an intervening bind
 race is possible and becomes a load failure. Cancellation remains serial SDK
 behavior. SSE requires `[DONE]` and a finish reason, aggregates text/tool deltas
-and usage, and bounds total input to 8 MiB.
+and usage, and bounds total input to 8 MiB. Usage is `{}` when the server sent
+none (never placeholder zeros); llama.cpp's last `timings` object (stream or
+non-stream) is passed through as `timings`.
 
 The LFM3 pack enables text-only d1 routing: image/audio attachments select their
 sole compatible specialist without loading d1 or a router projector. Audio
@@ -556,7 +558,7 @@ transcription again. No automatic context truncation/summarization is performed.
 
 The default-on `web` feature implies `server`; `--no-default-features --features
 server` keeps the API without the UI. `GET`/`HEAD` on `/`, `/index.html`,
-`/app.mjs`, `/markdown.mjs`, `/style.css` serves compile-time embedded assets,
+`/app.mjs`, `/markdown.mjs`, `/stats.mjs`, `/style.css` serves compile-time embedded assets,
 not arbitrary filesystem paths. These immutable assets are public to bootstrap
 token entry; every API data/control request still requires the configured token.
 The UI sends it as a bearer header and stores it only in sessionStorage.
@@ -572,6 +574,46 @@ chunks add `lh: RouteDecision`; the final successful SSE chunk includes the
 executed backend while retaining the original routing reason. Audio chat's route
 still describes its input specialist, not a new routing call. Agent SSE already
 carries the full route and retained tool history.
+
+### Generation statistics
+
+Each chat answer carries a statistics object, computed by
+`lh_protocol::stats::generation_stats` from backend data plus harness wall-clock
+times of the model call (dispatch → result, excluding routing, model load and
+ASR). It appears as `lh.stats` on the final successful SSE chunk (deltas and
+error events carry none) and on non-streaming chat completions, and as
+`response.lh_stats` in the agent `done` event, where it covers the final model
+call only, not the whole tool loop. The final SSE chunk also carries the
+OpenAI `usage` object when the backend reported one. Speech answers have
+`stats: null`.
+
+| Field | Meaning |
+|-------|---------|
+| `completion_tokens` | Backend `usage.completion_tokens`, else llama.cpp `timings.predicted_n` |
+| `prompt_tokens` | Backend `usage.prompt_tokens`, else `timings.prompt_n` |
+| `tokens_per_second` | Decode rate, see below |
+| `rate_source` | `backend_timings`, `harness_stream`, or null |
+| `rate_window_ms` | Time window the rate divides by |
+| `elapsed_ms` | Harness time from dispatch to complete result |
+| `first_delta_ms` | Harness time from dispatch to the first streamed delta |
+
+`tokens_per_second` is `predicted_n * 1000 / predicted_ms` when llama.cpp
+timings exist (window: the backend's generation phase, without prompt
+processing). Otherwise, for streams with at least two backend-counted tokens, it
+is `(completion_tokens - 1) * 1000 / (last_delta_ms - first_delta_ms)`: the first
+delta ends prompt processing, so the window covers the remaining tokens; windows
+below 50 ms (buffered bursts) give null. Every field is a finite non-negative
+number or null meaning "not available"; nothing is estimated from characters,
+words or chunk counts, and zero/negative windows never divide. FreeToken and
+the mock report no timings; the mock has no usage unless a test injects it.
+
+The browser keeps one stats object per assistant message (`web/stats.mjs`):
+`startStats()` when an answer is created (phase `pending`, all values null),
+`completeStats()` only after `[DONE]`/`done`, `endStats()` with `cancelled`,
+`error` or `interrupted` (page reload) clearing every value. `latestStats(messages)`
+returns the selected conversation's latest answer statistics or null, so a
+conversation switch never shows another chat's values. Persisted stats are
+re-validated by `restoreStats()`.
 
 Ctrl+Enter in the focused message textarea calls `form.requestSubmit()`, so it
 shares the Send button's constraint validation, submit handler and busy guard.

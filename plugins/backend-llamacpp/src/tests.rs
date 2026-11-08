@@ -85,11 +85,12 @@ fn model_arguments_and_validation() {
 }
 #[test]
 fn http_chat_nonstream_preserves_multimodal_payload() {
-    let response = json!({"choices":[{"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"usage":{"total_tokens":7}}).to_string();
+    let response = json!({"choices":[{"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"usage":{"total_tokens":7},"timings":{"predicted_n":4,"predicted_ms":80.0}}).to_string();
     let (url, worker) = fake_http(response);
     let params = json!({"key":"k","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AA"}}]}],"params":{"temperature":0.3,"stream":true},"stream":false});
     let result = chat(&agent(3), &url, &params, |_| panic!("unexpected stream")).unwrap();
     assert_eq!(result["message"]["content"], "hello");
+    assert_eq!(result["timings"]["predicted_n"], 4);
     let body = worker.join().unwrap();
     assert_eq!(body["messages"], params["messages"]);
     assert_eq!(body["stream"], false);
@@ -98,7 +99,7 @@ fn http_chat_nonstream_preserves_multimodal_payload() {
 fn streaming_body() -> String {
     let chunks = [
         json!({"choices":[{"delta":{"role":"assistant","content":"hé","tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search","arguments":"{\"q\":"}}]}}]}),
-        json!({"choices":[{"delta":{"content":"llo","tool_calls":[{"index":0,"function":{"arguments":"\"x\"}"}}]},"finish_reason":"tool_calls"}]}),
+        json!({"choices":[{"delta":{"content":"llo","tool_calls":[{"index":0,"function":{"arguments":"\"x\"}"}}]},"finish_reason":"tool_calls"}],"timings":{"prompt_n":2,"prompt_ms":4.0,"predicted_n":3,"predicted_ms":60.0}}),
         json!({"choices":[],"usage":{"prompt_tokens":2,"completion_tokens":3,"total_tokens":5}}),
     ];
     format!(
@@ -127,6 +128,8 @@ fn http_sse_aggregates_text_tools_usage_and_emits() {
     );
     assert_eq!(result["finish_reason"], "tool_calls");
     assert_eq!(result["usage"]["total_tokens"], 5);
+    assert_eq!(result["timings"]["predicted_n"], 3);
+    assert_eq!(result["timings"]["predicted_ms"], 60.0);
     assert_eq!(
         worker.join().unwrap()["stream_options"]["include_usage"],
         true
