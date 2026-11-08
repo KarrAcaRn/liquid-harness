@@ -22,11 +22,26 @@ pub fn task_method(task: &str) -> Result<&'static str> {
         )),
     }
 }
+/// User `[plugins.<id>] enabled` overrides the manifest's `[plugin] enabled`.
+pub fn plugin_enabled(registry: &Registry, config: &Config, id: &str) -> bool {
+    config
+        .plugins
+        .get(id)
+        .and_then(|c| c.enabled)
+        .unwrap_or_else(|| {
+            registry
+                .plugins
+                .get(id)
+                .is_some_and(|p| p.manifest.plugin.enabled)
+        })
+}
 pub struct Engine {
     pub registry: Registry,
     pub config: Config,
     /// Shared model states; readable without holding the engine.
     pub lifecycle: Arc<crate::lifecycle::Lifecycle>,
+    /// Set by `lh serve`: bind address, log and restart trigger (self-description).
+    pub service: Option<crate::selfinfo::Service>,
     hosts: BTreeMap<String, Host>,
     cache: RouteCache,
     model_calls: u64,
@@ -105,6 +120,7 @@ impl Engine {
             )),
             registry,
             config,
+            service: None,
             hosts: BTreeMap::new(),
             cache: RouteCache::default(),
             model_calls: 0,
@@ -185,16 +201,16 @@ impl Engine {
         Ok(host)
     }
     pub fn enabled(&self, id: &str) -> bool {
-        self.config
-            .plugins
-            .get(id)
-            .and_then(|c| c.enabled)
-            .unwrap_or_else(|| {
-                self.registry
-                    .plugins
-                    .get(id)
-                    .is_some_and(|p| p.manifest.plugin.enabled)
-            })
+        plugin_enabled(&self.registry, &self.config, id)
+    }
+    /// Where the harness runs and what it found (`lh doctor`, `harness_info`).
+    pub fn self_info(&self) -> crate::selfinfo::SelfInfo {
+        crate::selfinfo::SelfInfo::gather(&crate::selfinfo::Context {
+            registry: &self.registry,
+            config: &self.config,
+            lifecycle: Some(&self.lifecycle),
+            service: self.service.as_ref(),
+        })
     }
     pub async fn require(&mut self, backend: &str, capability: &str, owner: &str) -> Result<Host> {
         let host = self.host(backend)?;

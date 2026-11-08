@@ -76,6 +76,15 @@ documents are unsupported. Use only the subset above, not arbitrary YAML.
 
 The repository ships `coding`, `shell`, `web-research`, and `git` under `skills/`.
 Their tool names match the developer MCP tools documented in [tools.md](tools.md).
+
+`harness-self` is built into `lh` (`crates/lh-core/skills/harness-self/SKILL.md`,
+compiled in with `include_str!`, listed by `skill_registry` without a search path).
+It explains `harness_info`, rebuilding in `build.source_dir`, `harness_restart`
+and when not to restart. A local skill named `harness-self` replaces it (no
+duplicate error, because built-ins are only added for names discovery did not
+find). `lh doctor` lists every `SKILL.md` on the search path with its error, if
+any, via `skills::inventory`, which never fails as a whole; `labelled_search_paths`
+adds the origin (`LH_SKILL_PATH`, `config-dir`, `cwd`, `plugin-dir`) per entry.
 The discovery module's unit tests cover ordering, duplicate names, canonical
 aliases, malformed metadata, body preservation, multiline descriptions, list
 forms, path ordering, and parsing the bundled skills. They run offline:

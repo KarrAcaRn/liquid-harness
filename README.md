@@ -105,6 +105,29 @@ Streamed chats send `: lh model_loading …` keepalive comments while waiting (a
 lfm3-vl… 40%". Stopping `lh serve` (Ctrl-C or SIGTERM) stops every llama-server it
 started. Details: [Model lifecycle](docs/ARCHITECTURE.md#model-lifecycle-m5a).
 
+### Where it runs, and restarting
+
+```sh
+lh doctor            # alias `lh where`; --json for the full report
+lh restart --url http://127.0.0.1:8484 --reason "new build"
+```
+
+`lh doctor` shows the build (commit, dirty flag, binary), host (CPU, RAM, container
+hint), the config file and how it was chosen, the plugin and skill search paths,
+every model with its file in the llama.cpp cache and whether it is downloaded, the
+llama-server version, whitelisted environment variables (secrets only as
+set/unset) and problems with a hint (exit code 2 on errors). A running server
+serves the same JSON at `GET /lh/v1/self`; the web UI Status page shows it as
+"About this harness" with a Restart button and a "new binary available" notice.
+
+`lh restart`, the Restart button, `POST /lh/v1/admin/restart`, SIGHUP and the
+agent tool `harness_restart` (always asks for approval) restart `lh serve` in
+place: it drains requests (`[service] drain_timeout_secs`, default 10), stops its
+plugins and llama-servers, and re-executes the same binary with the same
+arguments (same PID), so a freshly built binary takes effect. Under a supervisor
+set `[service] restart_command`. Details:
+[Self-awareness and restart](docs/ARCHITECTURE.md#self-awareness-and-restart-m5b).
+
 ### Agent tools
 
 The text specialist executes filesystem, shell and web tools in `lh run` and

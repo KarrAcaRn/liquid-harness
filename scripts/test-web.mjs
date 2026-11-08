@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel,newBinaryAvailable,aboutModels,restartedSince} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
@@ -31,6 +31,23 @@ assert.equal(loadingLabel({specialist:'lfm3-text',progress:0.424,eta_ms:2100}),'
 assert.equal(loadingLabel({id:'x',progress:7}),'Loading x… 100%');
 assert.equal(modelStateLabel({state:'loading',progress:0.5}),'Loading… 50%');
 assert.equal(modelStateLabel({state:'ready'}),'Ready');
+// About this harness (GET /lh/v1/self).
+assert.equal(newBinaryAvailable({build:{binary_changed:true}}),true);
+assert.equal(newBinaryAvailable({build:{binary_changed:null}}),false);
+assert.equal(newBinaryAvailable(undefined),false);
+assert.deepEqual(aboutModels({models:[
+  {id:'off',kind:'router',active:false,backends:[]},
+  {id:'text',kind:'specialist',active:true,state:'ready',backends:[{backend:'freetoken',enabled:false,source:'hf:a',local:null},{backend:'llamacpp',enabled:true,source:'hf:b',local:{downloaded:true,model_bytes:1024,projector_bytes:1024}}]},
+  {id:'vl',kind:'specialist',active:true,backends:[{backend:'llamacpp',enabled:true,source:'hf:c',local:{downloaded:false}}]},
+  {id:'remote',kind:'specialist',active:true,backends:[{backend:'freetoken',enabled:true,source:'hf:d',local:null}]},
+]}),[
+  {id:'text',kind:'specialist',source:'hf:b',backend:'llamacpp',disk:'on disk 2.0 KiB',downloaded:true,state:'ready'},
+  {id:'vl',kind:'specialist',source:'hf:c',backend:'llamacpp',disk:'not downloaded',downloaded:false,state:'stopped'},
+  {id:'remote',kind:'specialist',source:'hf:d',backend:'freetoken',disk:'managed by backend',downloaded:null,state:'stopped'},
+]);
+assert.equal(restartedSince({build:{started_unix:1}},{build:{started_unix:2}}),true);
+assert.equal(restartedSince({build:{started_unix:1}},{build:{started_unix:1}}),false);
+assert.equal(restartedSince({build:{started_unix:1}},null),false);
 assert.equal(modelStateLabel({state:'failed'}),'Failed');
 assert.equal(modelStateLabel({}),'Stopped');
 assert.equal(formatBytes(512),'512 B');

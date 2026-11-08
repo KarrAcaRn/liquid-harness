@@ -249,6 +249,11 @@ run ID exists and cannot be cancelled through this endpoint.
 | /lh/v1/skills | `{skills:[{name,description,tools}]}` |
 | /lh/v1/skills/{name} | `{name,description,tools,content}`; Markdown body, 404 if absent |
 | /lh/v1/status | `{processes:{plugin_id:process},resident_models:[{backend,loaded}],cascade:stats}` |
+| /lh/v1/self | Self-description `{build,host,config,discovery,models,backends,service,env,problems}` (docs/ARCHITECTURE.md "Self-awareness and restart"); never waits for the engine |
+
+`POST /lh/v1/admin/restart {reason?}` → `{restarting:true,reason,pid,method,drain_timeout_secs}`
+(sent before the drain), 409 when a restart is already pending, 403 from a
+non-loopback peer when no token is configured, 400 for a non-string reason.
 
 `process` is `{state:"not_started|running|failed",pid:null|number,restarts:number}`;
 restarts counts lifetime attempts, not just the rolling limit. Declarative and
@@ -257,7 +262,21 @@ disabled plugins appear as not_started. `stats` has `model_calls`, winning
 Resident entries use backend-owned `loaded` arrays (`key,pid,port,idle_secs` for
 llama.cpp); failed backend status reads have `{backend,error}`. Status does not
 load a model; `/tools` lazily starts MCP plugins to obtain authoritative schemas.
-Configuration maps and environment values are never returned.
+Configuration maps and environment values are never returned, except the
+whitelisted, secret-masked `env` section of `/lh/v1/self`.
+
+### Built-in harness tools (M5b)
+
+Every agent run also offers `harness_info` and, under `lh serve`, `harness_restart`
+(listed in `/lh/v1/tools` `builtins`). Plugin tools with these names are qualified.
+
+| Tool | Arguments | Policy |
+|---|---|---|
+| harness_info | `{section?}` one of build, host, config, discovery, models, backends, service, env, problems | Read-only, no approval; returns the `/lh/v1/self` JSON (or `{section,<section>:…}`); unknown section: `isError` with the list |
+| harness_restart | `{reason}` | Destructive: always approval, also in `auto-edit` and with `command_allow=["*"]`; only `yolo` is automatic; `always` is not remembered. Offered only when the engine has a restart trigger (`lh serve`). Approved: the run ends with `finish_reason:"restart"` and `restarting:true`, then the server drains and re-executes |
+
+The agent system message carries a compact "Harness environment" block (≤ 1400
+characters) next to the skill index; see the built-in `harness-self` skill.
 
 ### M4b verification
 

@@ -7,6 +7,7 @@ use lh_protocol::{
 };
 use std::{
     collections::{BTreeMap, VecDeque},
+    path::PathBuf,
     process::Stdio,
     time::{Duration, Instant},
 };
@@ -129,6 +130,38 @@ impl Process {
         let _ = self.stderr.await;
     }
 }
+/// Where a process plugin's `[run] command` resolves, in spawn order: the
+/// plugin directory, the running `lh` executable's directory, then `$PATH`.
+/// Returns the selected path (the bare command for a PATH lookup), the rule
+/// that matched (`plugin-dir`, `lh-dir`, `PATH` or `missing`) and, for PATH,
+/// the file actually found there (if any).
+pub fn resolve_command(entry: &Entry) -> Option<(PathBuf, &'static str, Option<PathBuf>)> {
+    let run = entry.manifest.run.as_ref()?;
+    let local = entry.path.parent()?.join(&run.command);
+    if local.is_file() {
+        return Some((local, "plugin-dir", None));
+    }
+    if let Some(sibling) = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|dir| dir.join(&run.command)))
+        .filter(|p| p.is_file())
+    {
+        return Some((sibling, "lh-dir", None));
+    }
+    let found = which(&run.command);
+    let how = if found.is_some() { "PATH" } else { "missing" };
+    Some((run.command.clone().into(), how, found))
+}
+/// `$PATH` lookup of a bare command name; a name with a slash is checked as is.
+pub fn which(command: &str) -> Option<PathBuf> {
+    if command.contains('/') {
+        let path = PathBuf::from(command);
+        return path.is_file().then_some(path);
+    }
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|dir| dir.join(command))
+        .find(|p| p.is_file())
+}
 async fn spawn(entry: &Entry, config: &BTreeMap<String, Value>) -> Result<Process> {
     let run = entry
         .manifest
@@ -139,13 +172,9 @@ async fn spawn(entry: &Entry, config: &BTreeMap<String, Value>) -> Result<Proces
     let sibling = std::env::current_exe()
         .ok()
         .and_then(|p| p.parent().map(|dir| dir.join(&run.command)));
-    let executable = if local.is_file() {
-        local.clone()
-    } else if let Some(path) = sibling.as_ref().filter(|p| p.is_file()) {
-        path.clone()
-    } else {
-        run.command.clone().into()
-    };
+    let executable = resolve_command(entry)
+        .map(|(path, _, _)| path)
+        .unwrap_or_else(|| run.command.clone().into());
     let mut child = Command::new(&executable)
         .args(&run.args)
         .stdin(Stdio::piped())

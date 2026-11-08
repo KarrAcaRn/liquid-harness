@@ -1,5 +1,6 @@
 mod agent_ui;
 mod conversation;
+mod doctor;
 mod inference;
 mod repl;
 mod routing_eval;
@@ -81,6 +82,27 @@ enum Commands {
         router: Option<String>,
         prompt: String,
     },
+    /// Where the harness runs and what it found: build, host, config,
+    /// plugins, skills, models on disk, backends and problems with hints.
+    #[command(visible_alias = "where")]
+    Doctor {
+        /// Print the full JSON report (same as GET /lh/v1/self).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Ask a running `lh serve` to restart itself in place.
+    Restart {
+        #[arg(long, default_value = "http://127.0.0.1:8484")]
+        url: String,
+        #[arg(long, default_value = "lh restart")]
+        reason: String,
+        /// Bearer token variable (default: the configured server_token_env).
+        #[arg(long)]
+        token_env: Option<String>,
+        /// Return after the request instead of waiting for the server to come back.
+        #[arg(long)]
+        no_wait: bool,
+    },
 }
 #[derive(Subcommand)]
 enum Plugins {
@@ -106,6 +128,8 @@ enum Eval {
 }
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
+    // Capture start time, argv and the binary's identity before anything else.
+    lh_core::selfinfo::runtime();
     if let Err(e) = run().await {
         eprintln!("lh: {e}");
         std::process::exit(1);
@@ -116,6 +140,34 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let (config, directory) = Config::load(cli.config.as_deref())?;
     let registry = Registry::discover(&config, &directory)?;
     match cli.command {
+        Commands::Doctor { json: as_json } => {
+            let info = lh_core::selfinfo::SelfInfo::gather(&lh_core::selfinfo::Context {
+                registry: &registry,
+                config: &config,
+                lifecycle: None,
+                service: None,
+            });
+            if as_json {
+                println!("{}", json::to_string_pretty(&info.to_value())?);
+            } else {
+                print!("{}", doctor::render(&info));
+            }
+            if info.has_errors() {
+                std::process::exit(2);
+            }
+        }
+        Commands::Restart {
+            url,
+            reason,
+            token_env,
+            no_wait,
+        } => {
+            let token = token_env
+                .or(config.server_token_env.clone())
+                .and_then(|name| std::env::var(name).ok())
+                .filter(|t| !t.is_empty());
+            doctor::restart(&url, &reason, token.as_deref(), !no_wait)?;
+        }
         Commands::Chat { model } => {
             let mut engine = Engine::new(registry, config);
             let result = repl::run(&mut engine, model).await;

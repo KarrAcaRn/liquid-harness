@@ -187,6 +187,18 @@ pub async fn complete_control(
         return Ok((decision, response));
     }
     let mut sampling = specialist.params.as_object().cloned().unwrap_or_default();
+    // `[self] context_in_chat`: the agent's "Harness environment" block for
+    // plain chats too, merged into a leading system message.
+    if engine.config.self_info.context_in_chat {
+        let block = lh_core::selfinfo::context_block(&engine.self_info());
+        match adapted.first_mut() {
+            Some(first) if first["role"] == "system" && first["content"].is_string() => {
+                let text = format!("{}\n\n{block}", first["content"].as_str().unwrap_or(""));
+                first["content"] = json!(text);
+            }
+            _ => adapted.insert(0, json!({"role":"system","content":block})),
+        }
+    }
     let mut tools = None;
     if let Some(params) = params.as_object() {
         for (key, value) in params {

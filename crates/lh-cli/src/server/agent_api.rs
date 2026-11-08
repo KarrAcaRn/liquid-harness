@@ -43,7 +43,7 @@ pub(super) async fn management(state: &State, path: &str) -> ApiResult<Reply> {
             json!({"selected":engine.config.router,"routers":engine.registry.routers.values().collect::<Vec<_>>(),"cascade":engine.config.cascade,"stats":engine.routing_stats()})
         }
         "/lh/v1/tools" => {
-            json!({"tools":tools::discover(&mut engine,&[]).await.map_err(backend)?,"builtins":agent::builtin_schemas()})
+            json!({"tools":tools::discover(&mut engine,&[]).await.map_err(backend)?,"builtins":agent::builtin_schemas(&engine)})
         }
         "/lh/v1/skills" => {
             json!({"skills":agent::skill_registry(&engine).map_err(backend)?.values().map(|s|json!({"name":s.name,"description":s.description,"tools":s.tools})).collect::<Vec<_>>()})

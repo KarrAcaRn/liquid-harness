@@ -4,6 +4,7 @@
 use lh_protocol::{
     ModelSpec,
     json::{Value, json},
+    model_files::{cache_dir, resolve_hf},
 };
 use std::{
     fs::File,
@@ -184,79 +185,6 @@ pub fn shape(path: &Path) -> io::Result<Option<Shape>> {
         }
     }
     Ok(Some(result))
-}
-
-fn cache_dir(models_dir: Option<&str>) -> Option<PathBuf> {
-    if let Some(dir) = models_dir {
-        return Some(PathBuf::from(super::expand(dir)));
-    }
-    if let Some(dir) = std::env::var_os("LLAMA_CACHE") {
-        return Some(dir.into());
-    }
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache/llama.cpp"))
-}
-fn ggufs(dir: &Path, depth: u32, out: &mut Vec<(PathBuf, u64)>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        // `metadata` follows the snapshot symlinks of the Hugging Face cache layout.
-        let Ok(meta) = std::fs::metadata(&path) else {
-            continue;
-        };
-        if meta.is_dir() && depth > 0 {
-            ggufs(&path, depth - 1, out);
-        } else if meta.is_file() && path.extension().is_some_and(|e| e == "gguf") {
-            out.push((path, meta.len()));
-        }
-    }
-}
-/// A file on disk with its size in bytes.
-type Sized = (PathBuf, u64);
-/// Downloaded files for `hf:owner/repo[:quant]`: (model, largest matching projector).
-pub fn resolve_hf(source: &str, cache: &Path) -> Option<(Sized, Option<Sized>)> {
-    let (repo, quant) = source.split_once(':').unwrap_or((source, ""));
-    let (owner, name) = repo.split_once('/')?;
-    let (owner, name, quant) = (
-        owner.to_lowercase(),
-        name.to_lowercase(),
-        quant.to_lowercase(),
-    );
-    let stem = name.strip_suffix("-gguf").unwrap_or(&name).to_string();
-    let hub = format!("models--{owner}--{name}");
-    let flat = format!("{owner}_{name}_");
-    let mut files = Vec::new();
-    ggufs(cache, 4, &mut files);
-    files.sort();
-    let mut best: Option<(u8, (PathBuf, u64))> = None;
-    let mut projector: Option<(PathBuf, u64)> = None;
-    for (path, size) in files {
-        let full = path.to_string_lossy().to_lowercase();
-        let file = path
-            .file_name()
-            .map(|f| f.to_string_lossy().to_lowercase())
-            .unwrap_or_default();
-        let rank = if full.contains(&format!("/{hub}/")) {
-            3
-        } else if file.starts_with(&flat) {
-            2
-        } else if file.contains(&stem) {
-            1
-        } else {
-            continue;
-        };
-        if file.contains("mmproj") {
-            if projector.as_ref().is_none_or(|(_, s)| size > *s) {
-                projector = Some((path, size));
-            }
-        } else if (quant.is_empty() || file.contains(&quant))
-            && best.as_ref().is_none_or(|(r, _)| rank > *r)
-        {
-            best = Some((rank, (path, size)));
-        }
-    }
-    best.map(|(_, model)| (model, projector))
 }
 
 pub fn estimate(model: &ModelSpec, models_dir: Option<&str>) -> Value {

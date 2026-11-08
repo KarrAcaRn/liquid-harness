@@ -119,7 +119,10 @@ fn qualify(tools: &mut [Tool]) -> Result<()> {
     }
     for tool in tools.iter_mut() {
         if counts[&tool.original_name] > 1
-            || matches!(tool.original_name.as_str(), "skills_list" | "skill_view")
+            || matches!(
+                tool.original_name.as_str(),
+                "skills_list" | "skill_view" | "harness_info" | "harness_restart"
+            )
         {
             tool.name = format!("{}__{}", tool.plugin, tool.original_name);
         }

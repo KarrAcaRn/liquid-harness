@@ -18,13 +18,26 @@ pub struct Registry {
 }
 impl Registry {
     pub fn discover(config: &Config, config_dir: &Path) -> Result<Self> {
-        let mut paths: Vec<PathBuf> = std::env::var_os("LH_PLUGIN_PATH")
-            .map(|p| std::env::split_paths(&p).collect())
-            .unwrap_or_default();
-        paths.extend(config.plugin_path.clone());
-        paths.push(config_dir.join("plugins"));
-        paths.push(PathBuf::from("plugins"));
+        let paths: Vec<PathBuf> = Self::search_path(config, config_dir)
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect();
         Self::from_paths(&paths)
+    }
+    /// The plugin search path in order, each entry with where it came from:
+    /// `LH_PLUGIN_PATH`, `config` (`plugin_path`), `config-dir` or `cwd`.
+    pub fn search_path(config: &Config, config_dir: &Path) -> Vec<(PathBuf, &'static str)> {
+        let mut paths: Vec<(PathBuf, &'static str)> = std::env::var_os("LH_PLUGIN_PATH")
+            .map(|p| {
+                std::env::split_paths(&p)
+                    .map(|p| (p, "LH_PLUGIN_PATH"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        paths.extend(config.plugin_path.iter().map(|p| (p.clone(), "config")));
+        paths.push((config_dir.join("plugins"), "config-dir"));
+        paths.push((PathBuf::from("plugins"), "cwd"));
+        paths
     }
     /// A search entry may be a plugin directory or a directory of plugin directories.
     /// Canonical paths are deduplicated; different files declaring the same ID are errors.

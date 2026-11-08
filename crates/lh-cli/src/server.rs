@@ -1,6 +1,7 @@
 //! Small HTTP/1 adapter. The engine lock spans each complete inference, keeping
 //! backend broadcast notifications isolated between concurrent HTTP clients.
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+mod admin;
 mod agent_api;
 mod loading;
 #[cfg(feature = "web")]
@@ -42,6 +43,12 @@ struct State {
     lifecycle: Arc<lh_core::lifecycle::Lifecycle>,
     token: Option<String>,
     streams: Arc<std::sync::Mutex<Vec<tokio::task::AbortHandle>>>,
+    /// Requests whose handler has not returned yet (the drain waits for them).
+    in_flight: Arc<std::sync::atomic::AtomicUsize>,
+    restart: Arc<admin::RestartSignal>,
+    shared: Arc<admin::Shared>,
+    /// Becomes true when a restart drain times out: running handlers answer 503.
+    cancel: tokio::sync::watch::Receiver<bool>,
 }
 fn bad(message: impl ToString) -> (StatusCode, String) {
     (StatusCode::BAD_REQUEST, message.to_string())
@@ -395,7 +402,11 @@ async fn multipart(content_type: &str, bytes: Bytes) -> ApiResult<Value> {
     }
     Ok(value)
 }
-async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
+async fn handle(
+    request: Request<Incoming>,
+    state: State,
+    peer: std::net::SocketAddr,
+) -> ApiResult<Reply> {
     // The immutable shell is public so browsers can enter a token. All data
     // and control endpoints below still require the configured bearer token.
     #[cfg(feature = "web")]
@@ -414,6 +425,16 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
         }
     }
     let path = request.uri().path().to_owned();
+    // A pending restart refuses new work on kept-alive connections.
+    if state.restart.pending() {
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "lh is restarting; retry in a few seconds".into(),
+        ));
+    }
+    if request.method() == hyper::Method::GET && path == "/lh/v1/self" {
+        return Ok(json_response(admin::info(&state).to_value()));
+    }
     if request.method() == hyper::Method::GET && path.starts_with("/lh/v1/") {
         return agent_api::management(&state, &path).await;
     }
@@ -440,6 +461,7 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
             | "/route"
             | "/decide"
     ) && path != "/lh/v1/agent/runs"
+        && path != "/lh/v1/admin/restart"
         && !path.starts_with("/lh/v1/agent/runs/")
     {
         return Err((StatusCode::NOT_FOUND, "unknown endpoint".into()));
@@ -485,6 +507,9 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
     }
     if path == "/lh/v1/agent/runs" {
         return agent_api::start(state, value).await;
+    }
+    if path == "/lh/v1/admin/restart" {
+        return admin::restart(&state, peer, value).await;
     }
     if path.starts_with("/lh/v1/agent/runs/") {
         return agent_api::control(&state, &path, value).await;
@@ -591,9 +616,16 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
         _ => unreachable!(),
     }
 }
-/// Serve until Ctrl-C, then stop accepting requests, drain connections briefly,
-/// cancel remaining work, and explicitly shut down every backend process.
-pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error::Error>> {
+/// Why the accept loop ended.
+enum Stop {
+    Shutdown(std::io::Result<()>),
+    Restart(String),
+}
+/// Serve until Ctrl-C/SIGTERM (shut down) or a restart request (API, agent
+/// tool, SIGHUP). Either way: stop accepting, let in-flight requests finish
+/// (cancel them after a timeout), and explicitly shut down every backend
+/// process. A restart then re-executes the binary (see `admin::relaunch`).
+pub async fn serve(mut engine: Engine, bind: &str) -> Result<(), Box<dyn std::error::Error>> {
     let token = engine
         .config
         .server_token_env
@@ -608,15 +640,42 @@ pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error:
         })
         .transpose()?;
     let listener = TcpListener::bind(bind).await?;
-    eprintln!("lh server listening on {}", listener.local_addr()?);
+    let address = listener.local_addr()?;
+    eprintln!("lh server listening on {address}");
+    let restart = Arc::new(admin::RestartSignal::default());
+    let trigger = restart.clone();
+    let service = lh_core::selfinfo::Service {
+        bind: address.to_string(),
+        log: lh_core::selfinfo::probe::stderr_destination(),
+        restart_method: if engine.config.service.restart_command.is_some() {
+            "command"
+        } else {
+            "exec"
+        }
+        .into(),
+        restart: Some(Arc::new(move |reason| trigger.request(reason))),
+    };
+    engine.service = Some(service.clone());
+    let shared = Arc::new(admin::Shared {
+        registry: engine.registry.clone(),
+        config: engine.config.clone(),
+        service,
+    });
+    let drain_timeout = Duration::from_secs(engine.config.service.drain_timeout_secs);
     let targets = engine.warm_targets();
+    let (cancel_all, cancel) = tokio::sync::watch::channel(false);
     let state = State {
         runs: Arc::new(Mutex::new(Default::default())),
         lifecycle: engine.lifecycle.clone(),
         engine: Arc::new(Mutex::new(engine)),
         token,
         streams: Arc::new(std::sync::Mutex::new(Vec::new())),
+        in_flight: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        restart,
+        shared,
+        cancel,
     };
+    let mut warmup = None;
     // Warm start in the background: the listener is already accepting. One
     // engine lock per target, so a request queued behind the router load runs
     // before preloads (tokio's mutex is FIFO) and waits for, never repeats, a load.
@@ -626,7 +685,7 @@ pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error:
         };
         state.lifecycle.set_warmup("running", labels(&targets));
         let (engine, lifecycle) = (state.engine.clone(), state.lifecycle.clone());
-        let warmup = tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             for (index, target) in targets.iter().enumerate() {
                 lifecycle.set_warmup("running", labels(&targets[index..]));
                 let started = std::time::Instant::now();
@@ -642,7 +701,7 @@ pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error:
             }
             lifecycle.set_warmup("done", vec![]);
         });
-        state.streams.lock().unwrap().push(warmup.abort_handle());
+        warmup = Some(task.abort_handle());
     }
     let mut connections = JoinSet::new();
     let shutdown = async {
@@ -659,23 +718,85 @@ pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error:
         tokio::signal::ctrl_c().await
     };
     tokio::pin!(shutdown);
+    // SIGHUP performs the same full restart as the API (configuration,
+    // plugins and skills are re-read; models reload in the background).
+    #[cfg(unix)]
+    let mut hangup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())?;
+    // Never completes (it is polled on every loop iteration); the restart
+    // itself is picked up by `state.restart.wait()`. Repeated SIGHUPs during a
+    // pending restart are ignored by `request`.
+    let sighup = async {
+        #[cfg(unix)]
+        loop {
+            hangup.recv().await;
+            state.restart.request("SIGHUP".into());
+        }
+        #[cfg(not(unix))]
+        std::future::pending::<()>().await
+    };
+    tokio::pin!(sighup);
     let outcome = loop {
         tokio::select! {
-            signal = &mut shutdown => break signal,
+            signal = &mut shutdown => break Stop::Shutdown(signal),
+            reason = state.restart.wait() => break Stop::Restart(reason),
+            _ = &mut sighup => {},
             accept = listener.accept() => match accept {
-                Ok((socket, _)) => { let state = state.clone(); connections.spawn(async move {
+                Ok((socket, peer)) => { let state = state.clone(); connections.spawn(async move {
                     let service = service_fn(move |request| { let state = state.clone(); async move {
-                        Ok::<_, Infallible>(match handle(request, state).await { Ok(reply) => reply, Err((status, message)) => failure(status, &message) })
+                        let in_flight = state.in_flight.clone();
+                        let mut cancel = state.cancel.clone();
+                        in_flight.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        let reply = tokio::select! {
+                            result = handle(request, state, peer) => match result { Ok(reply) => reply, Err((status, message)) => failure(status, &message) },
+                            _ = cancel.wait_for(|cancelled| *cancelled) => failure(StatusCode::SERVICE_UNAVAILABLE, "request cancelled: lh is restarting (drain timeout); retry in a few seconds"),
+                        };
+                        in_flight.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                        Ok::<_, Infallible>(reply)
                     }});
                     let _ = hyper::server::conn::http1::Builder::new().max_buf_size(32 * 1024).serve_connection(TokioIo::new(socket), service).await;
                 }); },
-                Err(error) => break Err(error),
+                Err(error) => break Stop::Shutdown(Err(error)),
             },
             _ = connections.join_next(), if !connections.is_empty() => {},
         }
     };
     drop(listener);
-    if tokio::time::timeout(Duration::from_secs(2), async {
+    if let Some(warmup) = warmup {
+        warmup.abort();
+    }
+    if let Stop::Restart(reason) = &outcome {
+        eprintln!(
+            "lh: restarting ({reason}); draining for up to {} s",
+            drain_timeout.as_secs()
+        );
+        // Pending requests and agent runs may finish; idle keep-alive
+        // connections do not hold the drain.
+        let busy = || {
+            state.in_flight.load(std::sync::atomic::Ordering::SeqCst) > 0
+                || state
+                    .streams
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|w| !w.is_finished())
+        };
+        let started = std::time::Instant::now();
+        while busy() && started.elapsed() < drain_timeout {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        if busy() {
+            eprintln!("lh: drain timeout; cancelling remaining requests");
+            let _ = cancel_all.send(true);
+            for control in state.runs.lock().await.values() {
+                control.cancel();
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+        // Responses already handed to hyper (the restart reply itself) flush.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        connections.abort_all();
+        while connections.join_next().await.is_some() {}
+    } else if tokio::time::timeout(Duration::from_secs(2), async {
         while connections.join_next().await.is_some() {}
     })
     .await
@@ -689,6 +810,9 @@ pub async fn serve(engine: Engine, bind: &str) -> Result<(), Box<dyn std::error:
         worker.abort();
     }
     state.engine.lock().await.shutdown().await;
-    outcome?;
+    match outcome {
+        Stop::Shutdown(signal) => signal?,
+        Stop::Restart(reason) => admin::relaunch(&state.shared.config, &reason, address)?,
+    }
     Ok(())
 }

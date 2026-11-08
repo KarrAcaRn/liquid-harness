@@ -6,6 +6,7 @@ pub use serde_json as json;
 use std::collections::BTreeMap;
 pub use toml;
 pub mod chat;
+pub mod model_files;
 mod sse;
 pub mod stats;
 pub use chat::*;

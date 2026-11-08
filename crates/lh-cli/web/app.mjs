@@ -93,6 +93,19 @@ export function modelStateLabel(model) {
   if (model?.state === 'ready') return 'Ready';
   return 'Stopped';
 }
+// "About this harness" (GET /lh/v1/self): the binary on disk changed since start.
+export function newBinaryAvailable(info) { return info?.build?.binary_changed === true; }
+// Model rows: id, kind, first enabled backend's on-disk state.
+export function aboutModels(info) {
+  return (info?.models || []).filter(m => m.active).map(m => {
+    const choice = (m.backends || []).find(c => c.enabled) || (m.backends || [])[0] || {};
+    const local = choice.local;
+    const disk = !local ? 'managed by backend' : local.downloaded ? `on disk ${formatBytes((local.model_bytes || 0) + (local.projector_bytes || 0))}` : 'not downloaded';
+    return {id: m.id, kind: m.kind, source: choice.source || 'none', backend: choice.backend || 'none', disk, downloaded: local ? Boolean(local.downloaded) : null, state: m.state || 'stopped'};
+  });
+}
+// Restart finished: the server answers again with a different start time.
+export function restartedSince(before, after) { return Boolean(after?.build) && after.build.started_unix !== before?.build?.started_unix; }
 // Handles UTF-8 split across chunks, CR/LF/CRLF, comments and multiline data.
 export async function readSSE(body, onEvent) {
   if (!body) throw new Error('The server returned no stream.');
@@ -407,6 +420,38 @@ function boot() {
     const speakId = speakChoice; // The setting at completion time.
     if (!answer.error && typeof speakId === 'string' && answer.content.trim()) await speak(answer.content, speakId);
   }
+  // "About this harness": build, host, paths, models on disk, problems, Restart.
+  function aboutHarness(group, info) {
+    const b = info.build || {}, h = info.host || {}, c = info.config || {};
+    if (newBinaryAvailable(info)) { const note = el('p',`New binary available (modified ${b.binary_on_disk_modified_at || 'recently'}) – restart to apply.`,'alert'); note.dataset.kind = 'info'; note.setAttribute('role','status'); group.append(note); }
+    group.append(meta([
+      ['Version',`${b.version || '?'} · ${b.commit_short || 'unknown'}${b.dirty ? ' (dirty)' : ''} · ${b.profile || ''}`],
+      ['PID',b.pid],['Started',`${b.started_at || '?'} · restart #${b.restart_count ?? 0}`],
+      ['Host',`${h.hostname || '?'} · ${h.os || '?'} · ${h.logical_cpus ?? '?'} CPUs · ${formatBytes(h.memory_total_bytes)} RAM${h.container ? ` · ${h.container}` : ''}`],
+      ['Binary',code(b.binary || 'unknown'),true],['Config',code(`${c.path || 'none'} (${c.chosen_by || '?'}${c.loaded ? '' : ', defaults'})`),true],
+      ['Workspace',code(h.workspace_root || 'unknown'),true],
+      ['Plugin dirs',code((info.discovery?.plugin_search_path || []).filter(p => p.exists).map(p => p.path).join(', ') || 'none'),true],
+      ['Skill dirs',code((info.discovery?.skill_search_path || []).filter(p => p.exists).map(p => p.path).join(', ') || 'none'),true],
+      ['Service',`${info.service?.url || 'not serving'} · log ${info.service?.log || 'unknown'} · restart ${info.service?.restart?.method || 'n/a'}`],
+    ]));
+    const rows = aboutModels(info);
+    if (rows.length) { const grid = el('div',undefined,'card-grid'); for (const m of rows) { const card = el('article',undefined,'card'); card.append(cardHeader(m.id,[badge(m.disk, m.downloaded === false ? 'warn' : 'muted'),badge(modelStateLabel(m), m.state === 'ready' ? 'ok' : 'muted')]),meta([['Kind',m.kind],['Backend',m.backend],['Source',code(m.source),true]])); grid.append(card); } group.append(grid); }
+    for (const p of info.problems || []) group.append(el('p',`${p.severity}: ${p.message} – ${p.hint}`, p.severity === 'error' ? 'error' : 'hint'));
+    const actions = el('div',undefined,'card-actions');
+    const restart = button('Restart harness', async () => {
+      if (!window.confirm('Restart the harness now? Running requests get a few seconds to finish, then they are cancelled; models reload in the background.')) return;
+      restart.disabled = true; $('page-status').textContent = 'Restarting…';
+      await api('/lh/v1/admin/restart',{value:{reason:'web UI'}});
+      const deadline = Date.now() + 60000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 500));
+        try { const after = await (await api('/lh/v1/self')).json(); if (restartedSince(info, after)) { notice(`Harness restarted (pid ${after.build.pid}).`,'info'); return management(); } } catch { /* Not back yet. */ }
+      }
+      restart.disabled = false; $('page-status').textContent = 'The harness did not come back within 60 s.';
+    });
+    restart.className = 'button-danger';
+    actions.append(restart); group.append(actions, jsonDetails('Full self-description JSON',info));
+  }
   async function management() {
     const page = ['plugins','tools','skills','status','options'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chat';
     document.querySelectorAll('nav a').forEach(a => { if (a.hash === `#${page}`) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
@@ -415,7 +460,7 @@ function boot() {
     const version = ++pageVersion; if (page === 'chat') return;
     if (page === 'options') { loadOptions(); return; } // Browser-local: no server reads.
     $('page-title').textContent = page[0].toUpperCase()+page.slice(1); $('management-content').replaceChildren(); $('page-status').textContent = 'Loading…';
-    const paths = page === 'plugins' ? ['plugins','specialists','router'] : page === 'status' ? ['status','router'] : [page];
+    const paths = page === 'plugins' ? ['plugins','specialists','router'] : page === 'status' ? ['self','status','router'] : [page];
     // Parallel management reads contend for the nonblocking engine lock.
     const results = [];
     for (const path of paths) {
@@ -428,8 +473,9 @@ function boot() {
     const processBadge = state => badge(`Process ${state || 'unknown'}`, state === 'running' ? 'ok' : state === 'failed' ? 'warn' : 'muted');
     const block = (title, value) => { const box = el('div', undefined, 'meta-block'); box.append(el('h4', title), el('pre', JSON.stringify(value, null, 2))); return box; };
     for (const {path,data,error} of results) {
-      const name = path[0].toUpperCase()+path.slice(1), group = el('section',undefined,'panel'), heading = el('h3',name); group.append(heading);
+      const name = path[0].toUpperCase()+path.slice(1), group = el('section',undefined,'panel'), heading = el('h3',path === 'self' ? 'About this harness' : name); group.append(heading);
       if (error) { group.append(el('p',error.message,'error')); $('management-content').append(group); continue; }
+      if (path === 'self') { aboutHarness(group, data); $('management-content').append(group); continue; }
       const entries = data[path];
       if (Array.isArray(entries)) {
         heading.textContent = `${name} (${entries.length})`;

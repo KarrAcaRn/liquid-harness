@@ -531,8 +531,9 @@ Request ─► 1. explicit? ──yes──► specialist by id/alias
 ## 6. Crates
 
 ```
-crates/lh-protocol    JSON-RPC envelopes, manifest structs, DTOs (chat, decide, route).
-                      Depends on serde/serde_json/toml only. No async.
+crates/lh-protocol    JSON-RPC envelopes, manifest structs, DTOs (chat, decide, route),
+                      `model_files` (llama.cpp cache lookup shared by the llama.cpp
+                      backend and `lh doctor`). Depends on serde/serde_json/toml only. No async.
 crates/lh-plugin-sdk  Write Rust plugins in ~30 lines: blocking stdio loop, method
                       dispatch, stream/log helpers; separate MCP tools transport.
                       std + lh-protocol only.
@@ -572,6 +573,8 @@ lh run --speak-out out.wav --language de "Guten Morgen" # text verbatim to speec
 lh chat  [--model ID|auto]           # REPL; /model, /explain, /reset
 lh serve [--bind 127.0.0.1:8484]     # OpenAI-compatible API
 lh models pull <specialist-id>       # pre-download a specialist's model
+lh doctor [--json]                   # alias `lh where`: self-description + problems (exit 2 on errors)
+lh restart [--url http://127.0.0.1:8484] [--reason R] [--no-wait]   # restart a running lh serve
 ```
 
 ## 8. HTTP API (`lh serve`)
@@ -607,7 +610,8 @@ lifecycle" for the busy case), then the selected specialist is pinned
 for execution (no second model decision). In-stream failures are error events.
 A disconnected client does not cancel the serial backend handler. SIGINT/SIGTERM stop
 accepting, drains connections briefly, aborts pending HTTP work and shuts down
-the engine. No cancellation/replay promise is added to the SDK.
+the engine. SIGHUP and `POST /lh/v1/admin/restart` restart in place instead (see
+"Self-awareness and restart"). No cancellation/replay promise is added to the SDK.
 
 `x-lh-route: ID;p=CONFIDENCE;stage=REASON` identifies the input specialist.
 Chat audio uses transcribe→chat (default text, or vision when images remain);
@@ -839,13 +843,110 @@ The text only asks the model to behave in a certain way; it does not add tools
 does not guarantee tool use or factual correctness.
 
 ## 9. Configuration
+### Self-awareness and restart (M5b)
+
+One introspection source, `lh_core::selfinfo::SelfInfo`, describes where the
+harness runs and what it found. It is gathered on request (cheap: file metadata,
+`/proc`, no plugin start, no model load; the only subprocess is
+`llama-server --version`, cached per binary path and file stamp) and serialized
+as JSON sections:
+
+- `build`: version, git commit + dirty flag + build time (from `crates/lh-core/build.rs`
+  at compile time; git never runs at runtime; `unknown` without a checkout), profile,
+  `source_dir` (the workspace the binary was built from, when it still exists),
+  binary path/size/mtime at start, `binary_changed` (the file at that path now has a
+  different size/mtime/inode: "new binary available"), pid, start time, uptime,
+  argv, `restart_count` and `last_restart_reason`.
+- `host`: hostname, OS (`/etc/os-release`), kernel, arch, CPU model, logical CPUs,
+  memory total (MemTotal lowered to a cgroup v2 `memory.max`) and available
+  (the M5a probe), a container hint (`/.dockerenv`, `/run/.containerenv`,
+  `$container`, PID 1's cgroup; a hint, never proof), cwd and the agent workspace
+  (`tools-fs` `workspace_root`, else the working directory).
+- `config`: file path, `chosen_by` (`--config`, `LH_CONFIG`, `xdg-default`,
+  `defaults` when no file exists), router, default specialist, token variable
+  (set/unset), agent approval, lifecycle and service settings.
+- `discovery`: plugin search path in order with each entry's source
+  (`LH_PLUGIN_PATH`, `config`, `config-dir`, `cwd`) and existence; every plugin
+  with manifest dir and resolved executable (`plugin-dir`, `lh-dir`, `PATH`,
+  `missing`, `declarative`, the same order the host spawns with); the skill search
+  path with sources and every `SKILL.md` with its name or error, plus built-ins.
+- `models`: every router and specialist with its backend chain; for llama.cpp
+  choices the resolved GGUF and projector in the cache (`models_dir`, else
+  `LLAMA_CACHE`, else `~/.cache/llama.cpp`; Hugging Face hub layout and llama.cpp
+  flat names) or the `file:` path, sizes, `downloaded`, and the M5a state/pid.
+  Backends that manage their own files (FreeToken) report `local: null`.
+- `backends`: llama-server path and `--version` (or the error), model cache;
+  FreeToken models with mode (`url`/`spawn`), URL and token variable (set/unset).
+- `service` (`lh serve` only): bind, URL, log destination (`[service] log`, else
+  where fd 2 points: file, terminal, pipe, socket), restart method and triggers.
+- `env`: whitelisted variables only (`LH_*`, `LLAMA_CACHE`, `HF_HOME`,
+  `HF_HUB_CACHE`, `XDG_CONFIG_HOME`, `LD_LIBRARY_PATH`) and the PATH entries
+  where `lh`, llama-server or plugin binaries were found. Variables whose name
+  contains TOKEN/KEY/SECRET/PASSWORD/CREDENTIAL/AUTH, `LH_TOOL_CONFIG`, and every
+  variable named by configuration (`server_token_env`, `*_env`, FreeToken
+  `token_env`, `HF_TOKEN`) appear only as `set`/`unset`. No value of a secret is
+  ever serialized.
+- `problems`: `{severity, code, subject, message, hint}`; `error` means a feature
+  cannot work: `router-missing`, `token-unset`, `plugin-executable-missing`,
+  `llama-server-missing`, `model-file-missing`, `skill-unreadable` (agent runs
+  fail while one exists); `warning`: `default-specialist-missing`,
+  `llama-server-version`, `model-not-downloaded` (downloads on first use).
+  Only enabled plugins and the active router/specialists are checked.
+
+Surfaces: `lh doctor` (alias `lh where`) prints a text report or `--json`,
+exit code 2 when an error-level problem exists (configuration that fails to
+parse still fails before the report). `GET /lh/v1/self` returns the JSON with
+the same bearer-token rule as every API endpoint; it answers from a copy of the
+registry/config taken at start plus the shared lifecycle tracker, so it never
+waits for the engine (an agent awaiting approval holds it). The web UI Status
+page shows an "About this harness" card (build, host, paths, active models with
+on-disk state, problems, a "new binary available – restart to apply" notice) and
+a confirmed Restart button that polls `/lh/v1/self` until the start time changes.
+
+Agent context: every agent run's system message gets a compact "Harness
+environment" block (hard cap 1400 characters, about 300 tokens: version/pid,
+host, workspace, config path, existing plugin/skill dirs, active models with
+state, how to restart, problem count). Plain chats get it only with
+`[self] context_in_chat = true` (default false), merged into a leading system
+message. Built-in tools: `harness_info` (read-only, optional `section`) returns
+the JSON; `harness_restart {reason}` exists only under `lh serve`. It is
+destructive: it always asks for approval, even in `auto-edit` mode and with
+`command_allow = ["*"]`; only `yolo` skips the prompt; "always allow" never
+carries over (the approval key includes the call id). In runs without an
+approval channel the prompt times out and denies. An approved restart ends the
+run with `finish_reason: "restart"` before the server drains. The built-in skill
+`harness-self` (compiled into `lh`, overridable by a local skill of the same
+name) explains inspecting, rebuilding with `cargo build --workspace --release`
+in `build.source_dir`, restarting, and when not to.
+
+Restart (`lh serve`): triggers are `POST /lh/v1/admin/restart` (`{reason}`
+optional; with a configured token the token is required, without one only
+loopback peers are accepted), `lh restart [--url]` (plain HTTP/1.1 over
+`std::net`, waits until `/lh/v1/self` reports a new start time), the web UI
+button, the agent tool, and SIGHUP. SIGHUP performs the same full restart (there
+is no partial reload: config, plugins and skills are re-read by the new process
+and models reload through the M5a warm start). The HTTP reply is sent first.
+Then: the listener closes (new connections are refused, new requests on kept-alive
+connections get 503 "lh is restarting"), warm-up stops, in-flight requests and
+agent streams get `[service] drain_timeout_secs` (default 10) to finish; after
+that, waiting handlers answer 503 "request cancelled: lh is restarting (drain
+timeout)" and agent runs are cancelled with an error event. The engine shuts
+down every plugin process and the llama-servers it owns. Finally the process
+re-executes its own binary (`exec`, same PID, same argv and environment plus
+`LH_RESTART_COUNT`/`LH_RESTART_REASON`; a `--bind host:0` becomes the port that
+was bound). With `[service] restart_command`, the command runs detached through
+`/bin/sh -c` in its own process group and `lh` exits 0 (for systemd/supervisors).
+A failed exec exits 1 with the error on stderr. A binary replaced on disk is what
+the exec runs, so rebuild + restart applies a new version.
+
 ### Agent execution and management (M4b)
 
 Specialists opt in with `agent = true` or nonempty `tools = [...]`. Selectors
 are plugin IDs, original tool names or collision-qualified `plugin__tool` names;
 empty selection with `agent=true` means all enabled MCP tools. Discovery lists
 all enabled tool plugins for a stable collision namespace; unrelated tools are
-then filtered before exposure. Built-in `skills_list`/`skill_view` names are reserved.
+then filtered before exposure. Built-in `skills_list`/`skill_view`/`harness_info`/
+`harness_restart` names are reserved (plugin tools with these names are qualified).
 `lh run` and `lh chat` execute the loop. The OpenAI `/v1/chat/completions` adapter
 remains client-owned tool execution, avoiding unexpected local side effects;
 use the explicit `/lh/v1/agent/runs` endpoint for host execution.
@@ -895,6 +996,15 @@ An explicitly named missing file is an error; a missing default file uses defaul
 Relative `plugin_path` entries are relative to the configuration file. When a config
 file is overridden, its parent directory supplies the adjacent `plugins` search path.
 User `[plugins.<id>.config]` settings shallowly override manifest `[config]` keys.
+
+```toml
+[self]
+context_in_chat = false         # also give plain (non-agent) chats the "Harness environment" block
+[service]
+drain_timeout_secs = 10         # restart drain before in-flight requests are cancelled (1..=3600)
+# restart_command = "systemctl --user restart lh"   # supervisor setups: run detached, then exit
+# log = "/var/log/lh.log"       # reported log destination when stderr cannot be detected
+```
 
 ## 10. Testing
 

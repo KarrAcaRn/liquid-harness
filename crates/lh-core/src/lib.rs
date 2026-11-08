@@ -8,6 +8,7 @@ pub mod host;
 pub mod lifecycle;
 pub mod registry;
 pub mod router;
+pub mod selfinfo;
 pub mod skills;
 pub mod tools;
 

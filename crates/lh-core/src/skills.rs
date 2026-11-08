@@ -14,10 +14,57 @@ pub struct Skill {
     pub content: String,
     /// Suggested tools, not permissions or an allowlist.
     pub tools: Vec<String>,
+    /// The `SKILL.md` it was read from; `None` for skills built into `lh`.
+    #[serde(skip)]
+    pub path: Option<PathBuf>,
+}
+
+/// Skills compiled into the binary, available without any search path. A
+/// local skill with the same name replaces the built-in one.
+pub const BUILTIN: &[(&str, &str)] = &[(
+    "harness-self",
+    include_str!("../skills/harness-self/SKILL.md"),
+)];
+/// Adds the [`BUILTIN`] skills that no local file overrides.
+pub fn with_builtins(mut skills: BTreeMap<String, Skill>) -> BTreeMap<String, Skill> {
+    for (name, text) in BUILTIN {
+        if !skills.contains_key(*name) {
+            let skill = parse(text).expect("built-in skill parses");
+            skills.insert(skill.name.clone(), skill);
+        }
+    }
+    skills
 }
 
 pub fn search_paths(config_dir: &Path, plugin_dirs: &[PathBuf]) -> Vec<PathBuf> {
-    paths_with_env(config_dir, plugin_dirs, std::env::var_os("LH_SKILL_PATH"))
+    labelled_search_paths(config_dir, plugin_dirs)
+        .into_iter()
+        .map(|(path, _)| path)
+        .collect()
+}
+/// [`search_paths`] with the origin of each entry: `LH_SKILL_PATH`,
+/// `config-dir`, `cwd` or `plugin-dir`.
+pub fn labelled_search_paths(
+    config_dir: &Path,
+    plugin_dirs: &[PathBuf],
+) -> Vec<(PathBuf, &'static str)> {
+    let env = paths_with_env(config_dir, &[], std::env::var_os("LH_SKILL_PATH"));
+    let fixed = 2; // config-dir and cwd follow the environment entries.
+    let env_count = env.len() - fixed;
+    env.into_iter()
+        .enumerate()
+        .map(|(i, p)| {
+            let label = if i < env_count {
+                "LH_SKILL_PATH"
+            } else if i == env_count {
+                "config-dir"
+            } else {
+                "cwd"
+            };
+            (p, label)
+        })
+        .chain(plugin_dirs.iter().map(|p| (p.join("skills"), "plugin-dir")))
+        .collect()
 }
 
 fn paths_with_env(
@@ -42,6 +89,83 @@ fn paths_with_env(
 /// Missing entries are ignored; aliases of the same canonical file are read once.
 /// Distinct files with the same name are errors, never precedence overrides.
 pub fn discover(paths: &[PathBuf]) -> Result<BTreeMap<String, Skill>> {
+    let mut skills = BTreeMap::new();
+    let mut origins = BTreeMap::new();
+    for file in skill_files(paths)? {
+        let text = std::fs::read_to_string(&file)?;
+        let mut skill =
+            parse(&text).map_err(|e| Error::new(-32602, format!("{}: {e}", file.display())))?;
+        if let Some(previous) = origins.insert(skill.name.clone(), file.clone()) {
+            return Err(Error::new(
+                -32602,
+                format!(
+                    "duplicate skill name '{}' in {} and {}",
+                    skill.name,
+                    previous.display(),
+                    file.display()
+                ),
+            ));
+        }
+        skill.path = Some(file);
+        skills.insert(skill.name.clone(), skill);
+    }
+    Ok(skills)
+}
+
+/// One `SKILL.md` found on the search path: its skill name, or why it cannot
+/// be used (unreadable, invalid frontmatter, duplicate name). Never fails as a
+/// whole, so `lh doctor` can report every problem at once.
+#[derive(Clone, Debug, Serialize)]
+pub struct SkillFile {
+    pub path: PathBuf,
+    pub name: Option<String>,
+    pub error: Option<String>,
+}
+pub fn inventory(paths: &[PathBuf]) -> Vec<SkillFile> {
+    let mut out = Vec::new();
+    let mut files = BTreeSet::new();
+    for path in paths {
+        match skill_files(std::slice::from_ref(path)) {
+            Ok(found) => files.extend(found),
+            Err(error) => out.push(SkillFile {
+                path: path.clone(),
+                name: None,
+                error: Some(format!("cannot read search entry: {}", error.message)),
+            }),
+        }
+    }
+    let mut names: BTreeMap<String, PathBuf> = BTreeMap::new();
+    for file in files {
+        let parsed = std::fs::read_to_string(&file)
+            .map_err(|e| format!("unreadable: {e}"))
+            .and_then(|text| parse(&text).map_err(|e| format!("invalid: {e}")));
+        let (name, error) = match parsed {
+            Ok(skill) => match names.get(&skill.name) {
+                Some(previous) => (
+                    Some(skill.name),
+                    Some(format!(
+                        "duplicate skill name (also in {})",
+                        previous.display()
+                    )),
+                ),
+                None => {
+                    names.insert(skill.name.clone(), file.clone());
+                    (Some(skill.name), None)
+                }
+            },
+            Err(error) => (None, Some(error)),
+        };
+        out.push(SkillFile {
+            path: file,
+            name,
+            error,
+        });
+    }
+    out
+}
+
+/// Canonical `SKILL.md` files below the search entries (see [`discover`]).
+fn skill_files(paths: &[PathBuf]) -> Result<BTreeSet<PathBuf>> {
     let mut files = BTreeSet::new();
     for path in paths {
         match std::fs::metadata(path) {
@@ -68,26 +192,7 @@ pub fn discover(paths: &[PathBuf]) -> Result<BTreeMap<String, Skill>> {
             }
         }
     }
-    let mut skills = BTreeMap::new();
-    let mut origins = BTreeMap::new();
-    for file in files {
-        let text = std::fs::read_to_string(&file)?;
-        let skill =
-            parse(&text).map_err(|e| Error::new(-32602, format!("{}: {e}", file.display())))?;
-        if let Some(previous) = origins.insert(skill.name.clone(), file.clone()) {
-            return Err(Error::new(
-                -32602,
-                format!(
-                    "duplicate skill name '{}' in {} and {}",
-                    skill.name,
-                    previous.display(),
-                    file.display()
-                ),
-            ));
-        }
-        skills.insert(skill.name.clone(), skill);
-    }
-    Ok(skills)
+    Ok(files)
 }
 
 fn safe_name(name: &str) -> bool {
@@ -318,6 +423,7 @@ fn parse(text: &str) -> std::result::Result<Skill, String> {
         description,
         tools,
         content: text[offset..].into(),
+        path: None,
     })
 }
 
