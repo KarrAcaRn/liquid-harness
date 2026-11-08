@@ -1,5 +1,5 @@
 import { renderMarkdown } from './markdown.mjs';
-import { startStats, completeStats, endStats, restoreStats } from './stats.mjs';
+import { startStats, completeStats, endStats, restoreStats, latestStats, formatStats } from './stats.mjs';
 
 export const MAX_BODY = 6 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 4 * 1024 * 1024;
@@ -167,6 +167,13 @@ function boot() {
     box.replaceChildren(...(shown.length ? shown.map(renderMessage) : [el('p', 'No messages yet.', 'hint muted empty-state')]));
     [...box.querySelectorAll('details')].forEach((d,i) => { d.open = Boolean(opened[i]); });
     if (follow) box.scrollTop = box.scrollHeight;
+    renderStats(shown);
+  }
+  // Statistics line under the chat: the shown conversation's latest answer only
+  // (docs/ARCHITECTURE.md "Generation statistics"); hidden until one has stats.
+  function renderStats(messages) {
+    const line = $('chat-stats'), view = formatStats(latestStats(messages), navigator.languages?.[0] || navigator.language);
+    line.hidden = !view; line.textContent = view?.text || ''; line.title = view?.title || ''; line.dataset.phase = view?.phase || '';
   }
   function render() {
     $('conversation-title').textContent = current()?.title || 'New conversation';

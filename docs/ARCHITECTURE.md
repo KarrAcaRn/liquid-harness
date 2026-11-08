@@ -655,6 +655,18 @@ returns the selected conversation's latest answer statistics or null, so a
 conversation switch never shows another chat's values. Persisted stats are
 re-validated by `restoreStats()`.
 
+The chat shows them in `#chat-stats`, right of `#run-status` in one
+`.chat-status` row between the messages and the composer (wraps on narrow
+screens, never overlays). `formatStats(stats, locale)` builds the text: the
+rate first (`24.3 tokens/s`, number format from the browser locale via `Intl`,
+e.g. `24,3` for German), then `· N tokens` only when the server reported
+completion tokens; source, window, prompt tokens and model-call time go into the
+`title`. Missing values read `–`; pending answers show `– tokens/s` (the server
+sends no live rate), cancelled/failed/interrupted ones append the phase. The line
+is hidden while the shown conversation has no answer with stats. It is refreshed
+from `renderMessages()`, i.e. on every delta, completion, error and conversation
+switch, and keeps the final values until the next answer starts.
+
 Ctrl+Enter in the focused message textarea calls `form.requestSubmit()`, so it
 shares the Send button's constraint validation, submit handler and busy guard.
 Plain Enter keeps its newline; auto-repeat and IME composition never submit. The

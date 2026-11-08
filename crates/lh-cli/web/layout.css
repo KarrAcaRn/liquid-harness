@@ -69,7 +69,10 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
 #approvals { flex: 0 1 auto; min-height: 0; overflow: auto; }
 #approvals:empty { display: none; }
 .approval-actions { margin: var(--space-3, .75rem) 0 0; }
+/* Status row: run status left, generation statistics right; wraps on narrow screens. */
+.chat-status { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 var(--space-4, 1rem); flex-shrink: 0; }
 #run-status { flex-shrink: 0; margin: 0; }
+#chat-stats { margin: 0 0 0 auto; min-width: 0; overflow-wrap: anywhere; }
 
 #composer { display: flex; flex-direction: column; gap: var(--space-2, .5rem); flex-shrink: 0; padding-top: var(--space-3, .75rem); }
 #composer > label, #composer > p { margin: 0; }

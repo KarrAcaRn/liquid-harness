@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
 import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection} from '../crates/lh-cli/web/app.mjs';
-import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats} from '../crates/lh-cli/web/stats.mjs';
+import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs']) {
   const result = spawnSync(process.execPath,['--check',fileURLToPath(new URL(`../crates/lh-cli/web/${name}`,import.meta.url))],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
@@ -108,12 +108,34 @@ assert.match(source,/const answer = \{role:'assistant',content:'',events:\[\],pe
 assert.match(source,/if \(!done\) throw[^\n]*\n[^\n]*\n\s*answer\.stats = completeStats\(answer\.stats, finalStats\);/);
 assert.match(source,/answer\.stats = endStats\(answer\.stats, run\.cancelled \? 'cancelled' : 'error'\);/);
 assert.match(source,/message\.stats = restoreStats\(message\.stats\)/);
+// Statistics line: rate is the main value, tokens only when reported, placeholders never invent numbers.
+assert.deepEqual(formatStats(complete,'en-US'),{text:'20.0 tokens/s · 30 tokens',title:'Generation rate from backend timings (generation phase) over 1.5 s. 30 generated tokens. 4 prompt tokens. Model call 1.6 s.',phase:'complete'});
+assert.equal(formatStats({...complete,tokensPerSecond:24.25,completionTokens:1234},'de-DE').text,'24,3 tokens/s · 1.234 tokens');
+assert.equal(formatStats({...complete,completionTokens:1},'en-US').text,'20.0 tokens/s · 1 token');
+assert.equal(formatStats(completeStats(pending,{...wire,rate_source:'harness_stream'}),'en-US').title.startsWith('Generation rate from harness stream timing over 1.5 s.'),true);
+assert.equal(formatStats(completeStats(pending,{...wire,rate_window_ms:250,elapsed_ms:0.4}),'en-US').title,'Generation rate from backend timings (generation phase) over 250 ms. 30 generated tokens. 4 prompt tokens. Model call < 1 ms.');
+const noRate = completeStats(pending,{completion_tokens:12});
+assert.deepEqual(formatStats(noRate,'en-US'),{text:'– tokens/s · 12 tokens',title:'The backend reported no generation rate for this answer. 12 generated tokens.',phase:'complete'});
+assert.equal(formatStats(completeStats(pending,null),'en-US').text,'– tokens/s');
+assert.equal(formatStats(pending,'en-US').text,'– tokens/s');
+for (const phase of ['cancelled','error','interrupted']) assert.equal(formatStats(endStats(complete,phase),'en-US').text,`– tokens/s (${phase})`);
+// Stray values on non-complete phases are never shown.
+assert.equal(formatStats({...complete,phase:'pending'},'en-US').text,'– tokens/s');
+for (const junk of [null,undefined,'x',{},{phase:'weird',tokensPerSecond:5}]) assert.equal(formatStats(junk,'en-US'),null);
+// Chat switch: the line follows the shown conversation's latest answer; chats without stats hide it.
+assert.equal(formatStats(latestStats(chatA),'en-US').text,'20.0 tokens/s · 30 tokens');
+assert.equal(formatStats(latestStats([]),'en-US'),null);
+assert.equal(formatStats(latestStats([{role:'user',content:'x'},{role:'assistant',content:'saved before stats'}]),'en-US'),null);
+// app.mjs wiring: renderMessages (every delta, completion, error and conversation switch) refreshes the line.
+assert.match(source,/if \(follow\) box\.scrollTop = box\.scrollHeight;\n\s*renderStats\(shown\);/);
+assert.match(source,/formatStats\(latestStats\(messages\), navigator\.languages\?\.\[0\] \|\| navigator\.language\)/);
+assert.match(source,/line\.hidden = !view; line\.textContent = view\?\.text \|\| ''/);
 // Layout structure (docs/WEB-UI-PLAN.md sections 4-6): markup contract, CSP-safe CSS, kinds of notices.
 const web = name => readFileSync(fileURLToPath(new URL(`../crates/lh-cli/web/${name}`,import.meta.url)),'utf8');
 const html = web('index.html'), layout = web('layout.css').replace(/\/\*[\s\S]*?\*\//g,'');
 assert(html.indexOf('href="/style.css"') >= 0 && html.indexOf('href="/style.css"') < html.indexOf('href="/layout.css"'),'layout.css loads after style.css');
 assert.doesNotMatch(html,/\sstyle=/,'no inline style attributes (CSP style-src self)');
-for (const id of ['composer','prompt','send','cancel','model','agent','speak','files','record','attachments','approvals','messages','run-status','conversation-list','conversation-title','new-chat','rename-chat','delete-chat','export','auth-form','token','clear-token','theme','notice','storage-warning','chat-page','management-page','page-title','page-status','refresh-page','management-content','refresh-models','speech-player'])
+for (const id of ['composer','prompt','send','cancel','model','agent','speak','files','record','attachments','approvals','messages','run-status','chat-stats','conversation-list','conversation-title','new-chat','rename-chat','delete-chat','export','auth-form','token','clear-token','theme','notice','storage-warning','chat-page','management-page','page-title','page-status','refresh-page','management-content','refresh-models','speech-player'])
   assert.equal(html.split(`id="${id}"`).length,2,`exactly one #${id}`);
 assert.equal(html.match(/<h1[\s>]/g).length,1);
 const tag = id => html.match(new RegExp(`<[a-z]+ id="${id}"[^>]*>`))[0];

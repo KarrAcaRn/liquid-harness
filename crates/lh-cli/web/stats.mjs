@@ -72,3 +72,42 @@ export function latestStats(messages) {
   const answer = [...(messages || [])].reverse().find(m => m?.role === 'assistant');
   return answer?.stats ?? null;
 }
+
+// Text of the chat statistics line (#chat-stats) for one stats object.
+// Returns null when the line should be hidden (no answer with statistics yet).
+// The main value is the generation rate; generated tokens are appended only
+// when the server reported them. Missing values read "–", never a guess.
+// `locale` follows the browser (Intl), so the rate reads "24.3" or "24,3".
+const PLACEHOLDER = '–';
+const PHASE_NOTES = Object.freeze({
+  pending: 'Generating: the rate is reported when the answer completes.',
+  cancelled: 'Cancelled: partial answers report no statistics.',
+  error: 'Failed: no statistics for this answer.',
+  interrupted: 'Interrupted by a page reload: no statistics for this answer.',
+});
+const SOURCE_NOTES = Object.freeze({ backend_timings: 'backend timings (generation phase)', harness_stream: 'harness stream timing' });
+export function formatStats(stats, locale) {
+  if (!stats || typeof stats !== 'object' || !(stats.phase in PHASE_NOTES || stats.phase === 'complete')) return null;
+  const decimal = new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const whole = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
+  const rate = stats.phase === 'complete' ? number(stats.tokensPerSecond) : null;
+  const tokens = stats.phase === 'complete' ? integer(stats.completionTokens) : null;
+  const parts = [`${rate === null ? PLACEHOLDER : decimal.format(rate)} tokens/s`];
+  if (tokens !== null) parts.push(`${whole.format(tokens)} ${tokens === 1 ? 'token' : 'tokens'}`);
+  const text = parts.join(' · ') + (stats.phase in PHASE_NOTES && stats.phase !== 'pending' ? ` (${stats.phase})` : '');
+  let title = PHASE_NOTES[stats.phase];
+  if (stats.phase === 'complete') {
+    const notes = [];
+    const window = number(stats.rateWindowMs);
+    const duration = ms => ms < 1 ? '< 1 ms' : ms < 1000 ? `${whole.format(Math.round(ms))} ms` : `${decimal.format(ms / 1000)} s`;
+    if (rate !== null) notes.push(`Generation rate from ${SOURCE_NOTES[stats.rateSource] ?? 'the server'}${window !== null ? ` over ${duration(window)}` : ''}.`);
+    else notes.push('The backend reported no generation rate for this answer.');
+    if (tokens !== null) notes.push(`${whole.format(tokens)} generated tokens.`);
+    const prompt = integer(stats.promptTokens);
+    if (prompt !== null) notes.push(`${whole.format(prompt)} prompt tokens.`);
+    const elapsed = number(stats.elapsedMs);
+    if (elapsed !== null) notes.push(`Model call ${duration(elapsed)}.`);
+    title = notes.join(' ');
+  }
+  return { text, title, phase: stats.phase };
+}

@@ -167,6 +167,7 @@ details.raw-json > pre { margin-top: var(--space-1); }
 .badge-muted { color: var(--muted); background: var(--code); border-color: var(--line-strong); }
 
 .status-line, #run-status, #page-status { color: var(--muted); font-size: var(--font-size-s); }
+.stats-line { font-variant-numeric: tabular-nums; }
 
 dl.meta { font-size: var(--font-size-s); }
 dl.meta dt { color: var(--muted); font-weight: 600; }
