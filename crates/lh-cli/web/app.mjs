@@ -18,6 +18,22 @@ export function composerShortcut(event, form) {
   if (!event.repeat) form.requestSubmit();
   return true;
 }
+// Spoken replies (docs/ARCHITECTURE.md "Spoken replies"). The setting is one optional
+// speak ID (a `task = "speak"` specialist), never a hard-coded list: `/v1/models`
+// reports `speak_ids` per model. null means no automatic speech.
+export function speakIdsFor(catalog, model) {
+  const entry = Array.isArray(catalog) ? catalog.find(m => m?.id === model) : undefined;
+  const ids = Array.isArray(entry?.speak_ids) ? entry.speak_ids : [];
+  return [...new Set(ids.filter(id => typeof id === 'string' && id))];
+}
+// Keeps `selection` only when it is exactly one of `available`. Legacy boolean `true`
+// (the former "Speak replies" checkbox) maps to the single offered ID if unambiguous.
+// Everything else (false, unknown/stale ID, several candidates, junk) means none.
+export function resolveSpeakSelection(selection, available) {
+  if (typeof selection === 'string') return available.includes(selection) ? selection : null;
+  if (selection === true && available.length === 1) return available[0];
+  return null;
+}
 // Handles UTF-8 split across chunks, CR/LF/CRLF, comments and multiline data.
 export async function readSSE(body, onEvent) {
   if (!body) throw new Error('The server returned no stream.');
@@ -64,6 +80,10 @@ function boot() {
   const report = error => notice(error.message || String(error));
   let storageBlocked = false, token = '', active = null, attachments = [], attachmentBusy = false, recorder = null, recordingTimer = null, recordingPending = false, speechURL = null;
   let conversations = [], selected, pageVersion = 0, savedSnapshot = null;
+  // Spoken replies: speakChoice is the optional speak ID (null = no automatic speech).
+  // Until /v1/models answered (speakCatalog null) it may still hold the legacy boolean
+  // of the checkbox (also browser-restored form state), resolved by syncSpeak().
+  let speakCatalog = null, speakAvailable = [], speakChoice = $('speak').checked || null;
   const storageWarning = text => { $('storage-warning').hidden = false; $('storage-warning').textContent = text; };
   try { token = sessionStorage.getItem('lh.token') || ''; } catch { storageWarning('Session storage unavailable: the token will only remain in memory.'); }
   $('token').value = token;
@@ -169,7 +189,19 @@ function boot() {
     const data = await (await api('/v1/models')).json(), previous = $('model').value;
     $('model').replaceChildren(...(data.data || []).map(m => { const o = el('option', m.id === 'auto' ? 'Auto route' : m.id); o.value = m.id; return o; }));
     if ([...$('model').options].some(o => o.value === previous)) $('model').value = previous;
+    speakCatalog = data.data || []; syncSpeak();
   }
+  // Recomputes the speak IDs of the selected model and drops a choice it does not offer.
+  function syncSpeak() {
+    if (speakCatalog === null) return;
+    speakAvailable = speakIdsFor(speakCatalog, $('model').value || 'auto');
+    speakChoice = resolveSpeakSelection(speakChoice, speakAvailable);
+    renderSpeakControl();
+  }
+  // value: a speak ID, null for none, or a legacy boolean.
+  function chooseSpeak(value) { speakChoice = value; syncSpeak(); }
+  // The control only mirrors speakAvailable/speakChoice; it is not the source of truth.
+  function renderSpeakControl() { $('speak').checked = speakChoice !== null; }
   function renderAttachments() {
     $('attachments').replaceChildren(...attachments.map((a,index) => { const box = el('div', undefined,'attachment'); box.append(el('span',a.name)); media(box,a.part); box.append(button(`Remove ${a.name}`, () => { attachments.splice(index,1); renderAttachments(); })); return box; }));
     $('prompt').required = !attachments.length;
@@ -196,8 +228,8 @@ function boot() {
     for (const id of ['send','new-chat','rename-chat','delete-chat','model','agent','files','record','prompt']) $(id).disabled = value;
     $('cancel').disabled = !value;
   }
-  async function speak(text) {
-    const response = await api('/v1/audio/speech',{value:{model:'auto',input:text,response_format:'wav'}});
+  async function speak(text, id) {
+    const response = await api('/v1/audio/speech',{value:{model:id,input:text,response_format:'wav'}});
     if (speechURL) URL.revokeObjectURL(speechURL);
     speechURL = URL.createObjectURL(await response.blob());
     $('speech-player').src = speechURL; $('speech-player').hidden = false;
@@ -277,7 +309,8 @@ function boot() {
     } finally {
       delete answer.pending; active = null; busy(false); $('approvals').replaceChildren(); renderMessages(); persist();
     }
-    if (!answer.error && $('speak').checked && answer.content.trim()) await speak(answer.content);
+    const speakId = speakChoice; // The setting at completion time.
+    if (!answer.error && typeof speakId === 'string' && answer.content.trim()) await speak(answer.content, speakId);
   }
   async function management() {
     const page = ['plugins','tools','skills','status'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chat';
@@ -374,6 +407,11 @@ function boot() {
   let theme; try { theme = localStorage.getItem('lh.theme'); } catch { /* System theme is the fallback. */ }
   if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
   $('theme').addEventListener('click',() => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; const next = dark ? 'light' : 'dark'; document.documentElement.dataset.theme = next; try { localStorage.setItem('lh.theme',next); } catch { notice('Theme changed for this tab; browser storage unavailable.'); } });
+  $('model').addEventListener('change',syncSpeak);
+  $('speak').addEventListener('change',event => {
+    chooseSpeak(event.target.checked);
+    if (event.target.checked && speakCatalog !== null && speakChoice === null) notice(speakAvailable.length ? `Several speak specialists (${speakAvailable.join(', ')}); replies are not spoken.` : 'The selected model offers no speak specialist; replies are not spoken.', 'info');
+  });
   $('refresh-models').addEventListener('click',() => models().catch(report)); $('refresh-page').addEventListener('click',() => management().catch(report));
   window.addEventListener('hashchange',() => management().catch(report));
   window.addEventListener('storage',event => {

@@ -122,8 +122,10 @@ In the message field, Enter inserts a newline and Ctrl+Enter sends (same as Send
 
 Attach images/audio or record a short clip (localhost/HTTPS and microphone
 permission required). Non-WAV recordings need backend ffmpeg support. Speak replies
-requests WAV from the configured speech specialist; if autoplay is blocked, press
-Play. Attachments are capped at 4 MiB per turn and requests at 6 MiB including
+requests WAV from the speak specialist offered for the selected model (same plugin
+pack; any for Auto route) and stays off when none or several are offered; if
+autoplay is blocked, press Play. Attachments are capped at 4 MiB per turn and
+requests at 6 MiB including
 history. Export and start a new conversation when storage or context limits arise.
 
 When `server_token_env` is configured, expand Connection & authentication and

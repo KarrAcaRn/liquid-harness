@@ -325,6 +325,20 @@ fn endpoints_stream_multipart_and_media_validation() {
             .iter()
             .any(|v| v["id"] == "auto")
     );
+    // Speak IDs per model (fixtures: audio-pack declares mock-transcribe + mock-speak).
+    let speak_ids = |id: &str| {
+        models["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["id"] == id)
+            .unwrap()["speak_ids"]
+            .clone()
+    };
+    assert_eq!(speak_ids("auto"), json!(["mock-speak"]));
+    assert_eq!(speak_ids("mock-transcribe"), json!(["mock-speak"]));
+    assert_eq!(speak_ids("mock-text"), json!([]));
+    assert_eq!(speak_ids("mock-decide"), json!([]));
     let chat = json!({"model":"mock-text","messages":[{"role":"user","content":"hello stream"}]});
     let (status, headers, body) = server.post("/v1/chat/completions", chat.clone());
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));

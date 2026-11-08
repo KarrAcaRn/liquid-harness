@@ -365,13 +365,15 @@ async fn handle(request: Request<Incoming>, state: State) -> ApiResult<Reply> {
     }
     if request.method() == hyper::Method::GET && path == "/v1/models" {
         let engine = state.engine.lock().await;
-        let mut data =
-            vec![json!({"id":"auto","object":"model","created":0,"owned_by":"liquid-harness"})];
-        data.extend(
-            engine.registry.specialists.keys().map(
-                |id| json!({"id":id,"object":"model","created":0,"owned_by":"liquid-harness"}),
-            ),
-        );
+        // `speak_ids` (harness extension): speak specialists usable for spoken replies
+        // of this model; see docs/ARCHITECTURE.md "Spoken replies".
+        let data: Vec<Value> = std::iter::once("auto")
+            .chain(engine.registry.specialists.keys().map(String::as_str))
+            .map(|id| {
+                json!({"id":id,"object":"model","created":0,"owned_by":"liquid-harness",
+                    "speak_ids":engine.registry.speak_ids(id)})
+            })
+            .collect();
         return Ok(json_response(json!({"object":"list","data":data})));
     }
     if !matches!(

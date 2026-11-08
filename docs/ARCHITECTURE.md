@@ -506,7 +506,8 @@ lh models pull <specialist-id>       # pre-download a specialist's model
 ## 8. HTTP API (`lh serve`)
 
 OpenAI-compatible subset so Hermes, Open WebUI, etc. can use the harness as a provider:
-- `GET /v1/models` → `auto` + every specialist id.
+- `GET /v1/models` → `auto` + every specialist id. Each entry carries the harness
+  extension `speak_ids` (see "Spoken replies" below); OpenAI clients ignore it.
 - `POST /v1/chat/completions` (stream and non-stream). `model: "auto"` routes;
   a specialist id forces it. Images via `image_url` data URLs, audio via `input_audio`.
 - `POST /v1/route` → RouteDecision (harness extension).
@@ -579,6 +580,40 @@ chunks add `lh: RouteDecision`; the final successful SSE chunk includes the
 executed backend while retaining the original routing reason. Audio chat's route
 still describes its input specialist, not a new routing call. Agent SSE already
 carries the full route and retained tool history.
+
+### Spoken replies
+
+A speak ID is the id of a `task = "speak"` specialist. Nothing is hard-coded:
+`Registry::speak_ids(model)` derives them from the discovered manifests and
+`GET /v1/models` reports them per entry as `speak_ids` (sorted, unique):
+
+- a specialist → the speak specialists declared in the same plugin manifest
+  (`lfm3-text` → `["lfm3-speak"]`; a pack without one → `[]`);
+- `auto` → every speak specialist (auto routing may pick any pack);
+- unknown ids → `[]`. Clients treat a missing field (older server) as `[]`.
+
+The web UI setting is one optional speak ID, `speakChoice` in `app.mjs`: `null`
+means no automatic speech; a string means each completed, non-error, nonempty
+answer is sent to `POST /v1/audio/speech` with `model` set to exactly that ID
+(no `auto` speech routing). The scope and storage are unchanged from the former
+checkbox: in-memory per tab, not persisted. Resolution is the pure exported
+`resolveSpeakSelection(choice, available)`: a string is kept only if it is in
+`available`; legacy boolean `true` (the old checkbox, including browser-restored
+form state at boot) becomes the single offered ID only when exactly one is
+offered; `false`, stale/unknown IDs, several candidates or junk become `null`.
+`speakIdsFor(catalog, model)` reads (dedupes, filters) `speak_ids` from the
+`/v1/models` data array.
+
+Interface for the control (inside `boot()`): `speakAvailable` holds the IDs of
+the selected model, `speakChoice` the current selection; `syncSpeak()` runs after
+every `/v1/models` load and on `#model` change, revalidates the choice (a dropped
+ID stays dropped when switching back) and calls `renderSpeakControl()`, which
+only mirrors the state (currently the `#speak` checkbox). User input calls
+`chooseSpeak(value)` with an ID, `null` for none, or a legacy boolean. Until the
+first `/v1/models` answer the choice stays pending and nothing is spoken. A
+dropdown replaces `renderSpeakControl()` with "`<none>`" (value → `null`)
+followed by `speakAvailable`, and its change handler calls `chooseSpeak`.
+The REPL `/speak` toggle is unchanged (unique speak specialist).
 
 ### Generation statistics
 

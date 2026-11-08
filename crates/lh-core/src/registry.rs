@@ -144,6 +144,28 @@ impl Registry {
         }
         Ok(registry)
     }
+    /// Speak IDs offered for spoken replies of `model`: the `task = "speak"`
+    /// specialists declared in the same plugin manifest as `model`, or every speak
+    /// specialist for `auto`. Unknown models get none. Sorted, without duplicates.
+    pub fn speak_ids(&self, model: &str) -> Vec<String> {
+        let speak = |s: &&Specialist| s.task == "speak";
+        if model == "auto" {
+            return self
+                .specialists
+                .values()
+                .filter(speak)
+                .map(|s| s.id.clone())
+                .collect();
+        }
+        let ids: BTreeSet<String> = self
+            .plugins
+            .values()
+            .filter(|p| p.manifest.specialist.iter().any(|s| s.id == model))
+            .flat_map(|p| p.manifest.specialist.iter().filter(speak))
+            .map(|s| s.id.clone())
+            .collect();
+        ids.into_iter().collect()
+    }
     pub fn backend(&self, id: &str) -> Result<&Entry> {
         self.plugins
             .get(id)
@@ -174,5 +196,41 @@ fn validate_model(source: &str, path: &Path) -> Result<()> {
             -32602,
             format!("{}: invalid model.source '{source}'", path.display()),
         ))
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixtures() -> Registry {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        Registry::from_paths(&[
+            root.join("plugins/mock-backend"),
+            root.join("tests/fixtures/mock-pack"),
+            root.join("tests/fixtures/audio-pack"),
+        ])
+        .unwrap()
+    }
+
+    #[test]
+    fn speak_ids_follow_the_declaring_plugin() {
+        let registry = fixtures();
+        // audio-pack declares mock-transcribe and mock-speak.
+        assert_eq!(registry.speak_ids("mock-transcribe"), ["mock-speak"]);
+        assert_eq!(registry.speak_ids("mock-speak"), ["mock-speak"]);
+        // mock-pack declares no speak specialist: no IDs, never another pack's.
+        assert!(registry.speak_ids("mock-text").is_empty());
+        assert!(registry.speak_ids("unknown-model").is_empty());
+        assert!(registry.speak_ids("").is_empty());
+        // Auto routing may pick any specialist, so it offers every speak specialist.
+        assert_eq!(registry.speak_ids("auto"), ["mock-speak"]);
+    }
+
+    #[test]
+    fn real_lfm3_pack_offers_its_speak_specialist() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let registry = Registry::from_paths(&[root.join("plugins")]).unwrap();
+        assert_eq!(registry.speak_ids("lfm3-text"), ["lfm3-speak"]);
+        assert_eq!(registry.speak_ids("lfm3-speak"), ["lfm3-speak"]);
     }
 }

@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats} from '../crates/lh-cli/web/stats.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs']) {
   const result = spawnSync(process.execPath,['--check',fileURLToPath(new URL(`../crates/lh-cli/web/${name}`,import.meta.url))],{encoding:'utf8'});
@@ -36,6 +36,37 @@ for (const init of [{},{shiftKey:true},{ctrlKey:true,shiftKey:true},{ctrlKey:tru
 const source = readFileSync(fileURLToPath(new URL('../crates/lh-cli/web/app.mjs',import.meta.url)),'utf8');
 assert.match(source,/\$\('prompt'\)\.addEventListener\('keydown', event => composerShortcut\(event, \$\('composer'\)\)\)/);
 assert.doesNotMatch(source,/(document|window)\.addEventListener\('key/);
+// Spoken replies: speak IDs come from /v1/models `speak_ids`; the setting is one optional ID.
+const catalog = [{id:'auto',speak_ids:['mock-speak']},{id:'mock-text',speak_ids:[]},{id:'mock-transcribe',speak_ids:['mock-speak']},{id:'two',speak_ids:['a','b','a',7,'',null]},{id:'old-server'}];
+assert.deepEqual(speakIdsFor(catalog,'mock-transcribe'),['mock-speak']);
+assert.deepEqual(speakIdsFor(catalog,'two'),['a','b'],'deduplicated, junk dropped');
+for (const model of ['mock-text','old-server','unknown']) assert.deepEqual(speakIdsFor(catalog,model),[],model);
+for (const junk of [null,undefined,{},'x']) assert.deepEqual(speakIdsFor(junk,'auto'),[]);
+// No selection: no speech.
+assert.equal(resolveSpeakSelection(null,['mock-speak']),null);
+assert.equal(resolveSpeakSelection(undefined,['mock-speak']),null);
+// A valid ID is kept exactly; an invalid one falls back to none.
+assert.equal(resolveSpeakSelection('mock-speak',['mock-speak']),'mock-speak');
+assert.equal(resolveSpeakSelection('b',['a','b']),'b');
+for (const invalid of ['lfm3-speak','','MOCK-SPEAK',' mock-speak']) assert.equal(resolveSpeakSelection(invalid,['mock-speak']),null,invalid);
+// Model switch: a still-offered ID survives, a no-longer-offered one is dropped and stays dropped.
+let choice = resolveSpeakSelection('mock-speak',speakIdsFor(catalog,'auto'));
+choice = resolveSpeakSelection(choice,speakIdsFor(catalog,'mock-transcribe')); assert.equal(choice,'mock-speak');
+choice = resolveSpeakSelection(choice,speakIdsFor(catalog,'mock-text')); assert.equal(choice,null);
+choice = resolveSpeakSelection(choice,speakIdsFor(catalog,'mock-transcribe')); assert.equal(choice,null);
+// Legacy boolean checkbox state: true maps only to an unambiguous single ID; otherwise none.
+assert.equal(resolveSpeakSelection(true,['mock-speak']),'mock-speak');
+assert.equal(resolveSpeakSelection(true,['a','b']),null);
+assert.equal(resolveSpeakSelection(true,[]),null);
+assert.equal(resolveSpeakSelection(false,['mock-speak']),null);
+for (const junk of [0,1,{},['mock-speak']]) assert.equal(resolveSpeakSelection(junk,['mock-speak']),null);
+// app.mjs wiring: speech uses exactly the chosen ID (never auto routing), only for a string choice,
+// and model switches or reloaded catalogs re-validate it.
+assert.match(source,/api\('\/v1\/audio\/speech',\{value:\{model:id,input:text,response_format:'wav'\}\}\)/);
+assert.doesNotMatch(source,/audio\/speech',\{value:\{model:'auto'/);
+assert.match(source,/typeof speakId === 'string' && answer\.content\.trim\(\)\) await speak\(answer\.content, speakId\)/);
+assert.match(source,/speakCatalog = data\.data \|\| \[\]; syncSpeak\(\);/);
+assert.match(source,/\$\('model'\)\.addEventListener\('change',syncSpeak\)/);
 // Generation statistics: validation and per-answer lifecycle.
 const wire = {completion_tokens:30,prompt_tokens:4,tokens_per_second:20,rate_source:'backend_timings',rate_window_ms:1500,elapsed_ms:1600,first_delta_ms:90};
 const nulls = {completionTokens:null,promptTokens:null,tokensPerSecond:null,rateSource:null,rateWindowMs:null,elapsedMs:null,firstDeltaMs:null};
@@ -105,4 +136,4 @@ assert.deepEqual([...new Set(layout.match(/@media[^{]+/g).map(s => s.trim()))],[
 assert.doesNotMatch(layout,/var\(--[a-z0-9-]+\)/,'every token has a fallback');
 assert.doesNotMatch(layout,/(^|[\s;{])order\s*:/,'no CSS order: DOM order is visual order');
 assert.doesNotMatch(layout,/(^|[\s;{])(color|background|border-color|font|box-shadow|border-radius)\s*:/m,'visual properties belong to style.css');
-console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, generation stats and layout structure passed.');
+console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, speak ID selection, generation stats and layout structure passed.');
