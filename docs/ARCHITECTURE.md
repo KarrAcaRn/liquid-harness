@@ -600,23 +600,28 @@ The web UI setting is one optional speak ID, `speakChoice` in `app.mjs`: `null`
 means no automatic speech; a string means each completed, non-error, nonempty
 answer is sent to `POST /v1/audio/speech` with `model` set to exactly that ID
 (no `auto` speech routing). The scope and storage are unchanged from the former
-checkbox: in-memory per tab, not persisted. Resolution is the pure exported
+checkbox: in-memory per tab, not persisted; every page load starts at `null`
+(the `#speak` select has `autocomplete="off"`). Resolution is the pure exported
 `resolveSpeakSelection(choice, available)`: a string is kept only if it is in
-`available`; legacy boolean `true` (the old checkbox, including browser-restored
-form state at boot) becomes the single offered ID only when exactly one is
-offered; `false`, stale/unknown IDs, several candidates or junk become `null`.
+`available`; legacy boolean `true` becomes the single offered ID only when
+exactly one is offered; `false`, stale/unknown IDs, several candidates or junk
+become `null`.
 `speakIdsFor(catalog, model)` reads (dedupes, filters) `speak_ids` from the
 `/v1/models` data array.
 
-Interface for the control (inside `boot()`): `speakAvailable` holds the IDs of
-the selected model, `speakChoice` the current selection; `syncSpeak()` runs after
-every `/v1/models` load and on `#model` change, revalidates the choice (a dropped
-ID stays dropped when switching back) and calls `renderSpeakControl()`, which
-only mirrors the state (currently the `#speak` checkbox). User input calls
-`chooseSpeak(value)` with an ID, `null` for none, or a legacy boolean. Until the
-first `/v1/models` answer the choice stays pending and nothing is spoken. A
-dropdown replaces `renderSpeakControl()` with "`<none>`" (value → `null`)
-followed by `speakAvailable`, and its change handler calls `chooseSpeak`.
+The control is the "Speak replies" `<select id="speak">` (inside `boot()`):
+`speakAvailable` holds the IDs of the selected model, `speakChoice` the current
+selection; `syncSpeak()` runs after every `/v1/models` load and on `#model`
+change, revalidates the choice (a dropped ID stays dropped when switching back)
+and calls `renderSpeakControl()`, which only mirrors the state: it rebuilds all
+options from `speakOptions(available, choice)` — first "`<none>`" (value `""`,
+`SPEAK_NONE`), then each available ID once — and selects the mirrored value, so
+model switches and catalog refreshes leave no stale or duplicate entries. A
+model without speak IDs offers only "`<none>`". The change handler calls
+`chooseSpeak(speakChoiceFromValue(value))` (`""` → `null`). Until the first
+`/v1/models` answer only "`<none>`" exists and nothing is spoken. At ≤760 px
+the dropdown takes its own composer row and the attachment-limits hint is
+hidden so 390×844 does not scroll.
 The REPL `/speak` toggle is unchanged (unique speak specialist).
 
 ### Generation statistics

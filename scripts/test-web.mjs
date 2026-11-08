@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,newConversation,conversationContext,requestMessages,historyWithoutContext} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
@@ -68,6 +68,37 @@ assert.doesNotMatch(source,/audio\/speech',\{value:\{model:'auto'/);
 assert.match(source,/typeof speakId === 'string' && answer\.content\.trim\(\)\) await speak\(answer\.content, speakId\)/);
 assert.match(source,/speakCatalog = data\.data \|\| \[\]; syncSpeak\(\);/);
 assert.match(source,/\$\('model'\)\.addEventListener\('change',syncSpeak\)/);
+// "Speak replies" dropdown: "<none>" first, then each offered ID once; the shown value mirrors the choice.
+const labels = view => view.options.map(o => o.label);
+assert.equal(SPEAK_NONE,'<none>');
+assert.deepEqual(speakOptions([],null),{options:[{value:'',label:'<none>'}],selected:''},'model without speak IDs: only <none>');
+for (const junk of [undefined,null,'x',{}]) assert.deepEqual(labels(speakOptions(junk,'x')),['<none>']);
+assert.deepEqual(speakOptions(['mock-speak'],'mock-speak'),{options:[{value:'',label:'<none>'},{value:'mock-speak',label:'mock-speak'}],selected:'mock-speak'});
+assert.deepEqual(labels(speakOptions(['a','b','a','',7],'b')),['<none>','a','b'],'no duplicates or junk');
+assert.equal(speakOptions(['a','b'],'b').selected,'b');
+for (const choice of [null,undefined,true,'stale','']) assert.equal(speakOptions(['a'],choice).selected,'',String(choice));
+// Option value → setting: <none> stops automatic speech, an ID is used verbatim.
+assert.equal(speakChoiceFromValue(''),null);
+for (const junk of [undefined,null,0,{}]) assert.equal(speakChoiceFromValue(junk),null);
+assert.equal(speakChoiceFromValue('mock-speak'),'mock-speak');
+// Model switch round trip as the UI runs it (syncSpeak → renderSpeakControl): options follow the model,
+// the stale choice is dropped and stays dropped, and the control never shows a value it does not hold.
+const ui = {choice:null,model:'auto'};
+const sync = () => { const available = speakIdsFor(catalog,ui.model); ui.choice = resolveSpeakSelection(ui.choice,available); return speakOptions(available,ui.choice); };
+let shown = sync(); assert.deepEqual([labels(shown),shown.selected],[['<none>','mock-speak'],'']);
+ui.choice = speakChoiceFromValue('mock-speak'); shown = sync(); assert.equal(shown.selected,'mock-speak');
+ui.model = 'mock-transcribe'; shown = sync(); assert.deepEqual([labels(shown),shown.selected,ui.choice],[['<none>','mock-speak'],'mock-speak','mock-speak']);
+ui.model = 'mock-text'; shown = sync(); assert.deepEqual([labels(shown),shown.selected,ui.choice],[['<none>'],'',null]);
+ui.model = 'two'; shown = sync(); assert.deepEqual([labels(shown),shown.selected],[['<none>','a','b'],'']);
+ui.choice = speakChoiceFromValue('b'); shown = sync(); assert.equal(shown.selected,'b');
+ui.choice = speakChoiceFromValue(''); shown = sync(); assert.deepEqual([shown.selected,ui.choice],['',null]);
+// app.mjs/index.html wiring: the old checkbox is gone, the select is rebuilt (not appended to) and
+// starts at <none> on every page load (no browser form restore of a not-yet-built option).
+assert.match(source,/let speakCatalog = null, speakAvailable = \[\], speakChoice = null;/);
+assert.match(source,/\$\('speak'\)\.replaceChildren\(\.\.\.options\.map/);
+assert.match(source,/\$\('speak'\)\.value = selected;/);
+assert.match(source,/\$\('speak'\)\.addEventListener\('change',event => chooseSpeak\(speakChoiceFromValue\(event\.target\.value\)\)\);/);
+assert.doesNotMatch(source,/\$\('speak'\)\.checked/);
 // Generation statistics: validation and per-answer lifecycle.
 const wire = {completion_tokens:30,prompt_tokens:4,tokens_per_second:20,rate_source:'backend_timings',rate_window_ms:1500,elapsed_ms:1600,first_delta_ms:90};
 const nulls = {completionTokens:null,promptTokens:null,tokensPerSecond:null,rateSource:null,rateWindowMs:null,elapsedMs:null,firstDeltaMs:null};
@@ -149,6 +180,11 @@ assert(html.indexOf('class="composer-options"') < html.indexOf('class="composer-
 // The approval rule moved into each approval card; the composer hint keeps the limits.
 assert.doesNotMatch(html,/applies only to identical calls/); assert.match(source,/Agent approval “Always” applies only to identical calls in this run\./);
 assert.match(html,/Attachments: at most 4 MiB total per turn\. Full conversation requests must fit 6 MiB\./);
+// Speak replies is a labelled dropdown whose static markup offers only <none>.
+assert.match(html,/<div class="composer-speak"><label for="speak">Speak replies<\/label><select id="speak" autocomplete="off"><option value="">&lt;none&gt;<\/option><\/select><\/div>/);
+assert.doesNotMatch(html,/id="speak" type="checkbox"|speack/i);
+// At 390x844 the dropdown takes its own row; the composer limits hint is hidden on mobile instead.
+assert.match(layout.slice(layout.indexOf('@media (max-width: 760px)')),/#composer > \.hint \{ display: none; \}/);
 // Success notes are info, failures default to error; metadata is dt/dd, not dot-joined sentences.
 assert.match(source,/const notice = \(text, kind = 'error'\) => \{[^}]*dataset\.kind = kind/);
 for (const text of ['Code copied.','Token saved for this tab.','Token cleared.']) assert.match(source,new RegExp(`notice\\('${text.replace('.','\\.')}', 'info'\\)`),text);

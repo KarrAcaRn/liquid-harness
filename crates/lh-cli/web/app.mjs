@@ -62,6 +62,16 @@ export function requestMessages(context, history) {
 export function historyWithoutContext(context, messages) {
   return context && isContextMessage(messages[0], context) ? messages.slice(1) : [...messages];
 }
+// The "Speak replies" dropdown: "<none>" (empty value, never a valid ID) first, then the
+// offered IDs once each. `selected` is the option value that mirrors `choice`.
+export const SPEAK_NONE = '<none>';
+export function speakOptions(available, choice) {
+  const ids = [...new Set((Array.isArray(available) ? available : []).filter(id => typeof id === 'string' && id))];
+  const value = typeof choice === 'string' && ids.includes(choice) ? choice : '';
+  return { options: [{ value: '', label: SPEAK_NONE }, ...ids.map(id => ({ value: id, label: id }))], selected: value };
+}
+// Option value → setting: '' ("<none>") and anything that is not a nonempty string → null.
+export function speakChoiceFromValue(value) { return typeof value === 'string' && value ? value : null; }
 // Handles UTF-8 split across chunks, CR/LF/CRLF, comments and multiline data.
 export async function readSSE(body, onEvent) {
   if (!body) throw new Error('The server returned no stream.');
@@ -108,10 +118,10 @@ function boot() {
   const report = error => notice(error.message || String(error));
   let storageBlocked = false, token = '', active = null, attachments = [], attachmentBusy = false, recorder = null, recordingTimer = null, recordingPending = false, speechURL = null;
   let conversations = [], selected, pageVersion = 0, savedSnapshot = null;
-  // Spoken replies: speakChoice is the optional speak ID (null = no automatic speech).
-  // Until /v1/models answered (speakCatalog null) it may still hold the legacy boolean
-  // of the checkbox (also browser-restored form state), resolved by syncSpeak().
-  let speakCatalog = null, speakAvailable = [], speakChoice = $('speak').checked || null;
+  // Spoken replies: speakChoice is the optional speak ID (null = no automatic speech),
+  // in memory per tab. Every page load starts with "<none>" (the #speak select has
+  // autocomplete=off, so the browser does not restore an option that is not built yet).
+  let speakCatalog = null, speakAvailable = [], speakChoice = null;
   const storageWarning = text => { $('storage-warning').hidden = false; $('storage-warning').textContent = text; };
   try { token = sessionStorage.getItem('lh.token') || ''; } catch { storageWarning('Session storage unavailable: the token will only remain in memory.'); }
   $('token').value = token;
@@ -249,10 +259,15 @@ function boot() {
     speakChoice = resolveSpeakSelection(speakChoice, speakAvailable);
     renderSpeakControl();
   }
-  // value: a speak ID, null for none, or a legacy boolean.
+  // value: a speak ID or null for none (resolveSpeakSelection also accepts a legacy boolean).
   function chooseSpeak(value) { speakChoice = value; syncSpeak(); }
-  // The control only mirrors speakAvailable/speakChoice; it is not the source of truth.
-  function renderSpeakControl() { $('speak').checked = speakChoice !== null; }
+  // The dropdown only mirrors speakAvailable/speakChoice; it is not the source of truth.
+  // Options are rebuilt from scratch, so a model switch leaves no stale or duplicate entries.
+  function renderSpeakControl() {
+    const { options, selected } = speakOptions(speakAvailable, speakChoice);
+    $('speak').replaceChildren(...options.map(o => { const option = el('option', o.label); option.value = o.value; return option; }));
+    $('speak').value = selected;
+  }
   function renderAttachments() {
     $('attachments').replaceChildren(...attachments.map((a,index) => { const box = el('div', undefined,'attachment'); box.append(el('span',a.name)); media(box,a.part); box.append(button(`Remove ${a.name}`, () => { attachments.splice(index,1); renderAttachments(); })); return box; }));
     $('prompt').required = !attachments.length;
@@ -463,10 +478,7 @@ function boot() {
   if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
   $('theme').addEventListener('click',() => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; const next = dark ? 'light' : 'dark'; document.documentElement.dataset.theme = next; try { localStorage.setItem('lh.theme',next); } catch { notice('Theme changed for this tab; browser storage unavailable.'); } });
   $('model').addEventListener('change',syncSpeak);
-  $('speak').addEventListener('change',event => {
-    chooseSpeak(event.target.checked);
-    if (event.target.checked && speakCatalog !== null && speakChoice === null) notice(speakAvailable.length ? `Several speak specialists (${speakAvailable.join(', ')}); replies are not spoken.` : 'The selected model offers no speak specialist; replies are not spoken.', 'info');
-  });
+  $('speak').addEventListener('change',event => chooseSpeak(speakChoiceFromValue(event.target.value)));
   $('refresh-models').addEventListener('click',() => models().catch(report)); $('refresh-page').addEventListener('click',() => management().catch(report));
   window.addEventListener('hashchange',() => management().catch(report));
   window.addEventListener('storage',event => {
