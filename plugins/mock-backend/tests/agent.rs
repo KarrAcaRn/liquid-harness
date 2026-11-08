@@ -83,13 +83,21 @@ for line in sys.stdin:
         }
     }
     async fn run(&mut self, answer: Option<bool>) -> (lh_core::Result<Value>, Vec<Value>) {
+        self.run_messages(vec![json!({"role":"user","content":"test"})], answer)
+            .await
+    }
+    async fn run_messages(
+        &mut self,
+        messages: Vec<Value>,
+        answer: Option<bool>,
+    ) -> (lh_core::Result<Value>, Vec<Value>) {
         let route = self.engine.prepare("mock-text").await.unwrap();
         let control = Arc::new(Control::default());
         let (tx, mut rx) = mpsc::unbounded_channel();
         let job = agent::run(
             &mut self.engine,
             &route,
-            vec![json!({"role":"user","content":"test"})],
+            messages,
             json!({}),
             tx,
             control.clone(),
@@ -140,6 +148,47 @@ async fn full_loop_skills_and_approval_allow_deny_timeout() {
         assert!(events.iter().any(|e| e["event"] == "approval_required"));
         f.engine.shutdown().await;
     }
+}
+// Web default context (docs/ARCHITECTURE.md "Default context in conversations"): the
+// client sends its snapshot as a leading system message. The agent's own tool/skill
+// system message is not echoed, so `lh_messages` starts with the client context
+// (what app.mjs historyWithoutContext strips) and keeps other system messages.
+#[tokio::test]
+async fn client_context_is_echoed_first_and_once() {
+    let context = json!({"role":"system","content":"Erfinde keine Zahlen und Fakten."});
+    let chat = json!({"role":"system","content":"Du bist ein Spielleiter."});
+    let mut f = Fixture::new(json!([
+        call("s", "skill_view", json!({"name":"test-skill"})),
+        {"role":"assistant","content":"done 1"},
+        {"role":"assistant","content":"done 2"}
+    ]));
+    // The web client: requestMessages(context, history), then historyWithoutContext().
+    let mut history = vec![chat.clone()];
+    for turn in 1..=2 {
+        history.push(json!({"role":"user","content":format!("Frage {turn}")}));
+        let request = [vec![context.clone()], history.clone()].concat();
+        let (result, _) = f.run_messages(request, None).await;
+        let response = result.unwrap();
+        assert_eq!(response["message"]["content"], format!("done {turn}"));
+        let echoed = response["lh_messages"].as_array().unwrap().clone();
+        assert_eq!(echoed[0], context, "turn {turn}");
+        assert_eq!(echoed[1], chat, "chat-specific system message kept");
+        assert_eq!(echoed.iter().filter(|m| **m == context).count(), 1);
+        assert!(
+            !echoed.iter().any(|m| m["content"]
+                .as_str()
+                .is_some_and(|s| s.starts_with("You can use tools"))),
+            "agent tool instructions are not part of the client history"
+        );
+        history = echoed[1..].to_vec();
+        history.push(response["message"].clone());
+    }
+    assert_eq!(
+        history.iter().filter(|m| m["role"] == "system").count(),
+        1,
+        "only the chat-specific system message is stored"
+    );
+    f.engine.shutdown().await;
 }
 #[tokio::test]
 async fn auto_edit_budget_and_step_limit() {

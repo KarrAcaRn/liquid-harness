@@ -342,4 +342,30 @@ for (const caller of ["if (!conversations.length) fresh();","$('new-chat').addEv
 assert.match(source,/const context = conversationContext\(c\);\n\s*const payload = \{model:\$\('model'\)\.value \|\| 'auto',messages:requestMessages\(context,history\)\}/);
 assert.match(source,/historyWithoutContext\(context,savedHistory\)/);
 assert.doesNotMatch(source,/defaultContext\s*=/,'existing conversations are never reassigned a context');
+{ // End-to-end flow as boot()/fresh()/send() run it, over one storage across restarts (t_d69f6cdc).
+  const storage = new MemoryStorage();
+  const boot = () => { const settings = createSettings(storage); settings.init(); const raw = storage.getItem('lh.conversations'); return {settings, conversations: raw ? JSON.parse(raw) : []}; };
+  const persist = conversations => storage.setItem('lh.conversations',JSON.stringify(conversations));
+  const create = (app, id) => { const c = newConversation(id, app.settings.defaultContextForNewChat()); app.conversations.unshift(c); persist(app.conversations); return c; };
+  const send = (app, c, text) => { const history = [...c.history,{role:'user',content:text}]; const sent = requestMessages(conversationContext(c),history); c.history = [...historyWithoutContext(conversationContext(c),sent),{role:'assistant',content:'ok'}]; persist(app.conversations); return sent; };
+  const systems = sent => sent.filter(m => m.role === 'system').map(m => m.content);
+  // 1. No stored option: the German suggestion is stored and the first chat (boot) takes it.
+  let app = boot(); const a = create(app,'a');
+  assert.equal(storage.getItem(DEFAULT_CONTEXT_KEY),SUGGESTED_DEFAULT_CONTEXT);
+  assert.deepEqual(systems(send(app,a,'eins')),[SUGGESTED_DEFAULT_CONTEXT]); assert.deepEqual(systems(send(app,a,'zwei')),[SUGGESTED_DEFAULT_CONTEXT]);
+  // 2. A saved change applies to the next chat only; 3. an empty value adds nothing.
+  app.settings.saveDefaultContext('Antworte auf Deutsch.'); const b = create(app,'b');
+  app.settings.saveDefaultContext(''); const c = create(app,'c');
+  assert.deepEqual(systems(send(app,a,'drei')),[SUGGESTED_DEFAULT_CONTEXT]);
+  assert.deepEqual(systems(send(app,b,'eins')),['Antworte auf Deutsch.']);
+  assert.deepEqual(systems(send(app,c,'eins')),[]);
+  // 4. Restart: the empty option survives (not re-initialized), each reopened chat keeps its own snapshot.
+  const before = storage.getItem('lh.conversations'); app = boot();
+  assert.equal(storage.getItem(DEFAULT_CONTEXT_KEY),''); assert.equal(storage.getItem('lh.conversations'),before,'boot rewrites no conversation');
+  const [rc,rb,ra] = app.conversations;
+  assert.deepEqual([ra,rb,rc].map(x => systems(send(app,x,'nach Neustart'))),[[SUGGESTED_DEFAULT_CONTEXT],['Antworte auf Deutsch.'],[]]);
+  // Exactly once per chat: the snapshot is never stored as a turn, so every request carries it once.
+  for (const x of app.conversations) assert(!x.history.some(m => m.role === 'system'),x.id);
+  assert.equal(ra.history.length,8);
+}
 console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, speak ID selection, generation stats, layout structure, default-context options and conversation snapshots passed.');

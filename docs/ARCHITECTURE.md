@@ -751,6 +751,17 @@ the leading context message before the history is stored, and
 the context is sent exactly once per request. The chat view shows the snapshot
 as a quiet "Default context of this conversation" disclosure.
 
+Scope: the option is browser-local, so only conversations created in the web UI
+get it. `lh chat`, `lh run` and other API clients send whatever messages they
+build; the server never injects the default context. Routing ignores system
+messages (only user text and media select the specialist). The server contract
+that `historyWithoutContext()` relies on (agent `lh_messages` starts with the
+client's first message, without the agent's own system message) is tested in
+`plugins/mock-backend/tests/agent.rs`; the client side in
+`scripts/test-web.mjs`. The LFM3 chat template renders the two leading system
+messages as two system turns (checked with llama-server `/apply-template`).
+Manual browser checks: `docs/WEB-UI-DEFAULT-CONTEXT-RESULTS.md`.
+
 The text only asks the model to behave in a certain way; it does not add tools
 (no web search or file access unless the selected specialist offers them) and
 does not guarantee tool use or factual correctness.
