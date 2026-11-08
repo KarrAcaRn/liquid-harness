@@ -446,10 +446,13 @@ async fn crash_fails_every_inflight_call() {
 
 #[tokio::test]
 async fn bidirectional_backpressure_does_not_block_response_processing() {
+    // This is a liveness check, not a latency benchmark. Allow scheduling and
+    // debug-build JSON/pipe I/O headroom under parallel workspace tests. A real
+    // stdin/stdout deadlock still fails at this finite, test-only deadline.
     let h = Host::with_timeout(
         registry().plugins["mock"].clone(),
         BTreeMap::from([("enable_test_methods".into(), json!(true))]),
-        Duration::from_secs(2),
+        Duration::from_secs(15),
     );
     load(&h).await;
     let content = "large".repeat(200_000);

@@ -647,6 +647,11 @@ User `[plugins.<id>.config]` settings shallowly override manifest `[config]` key
 
 - Unit tests per crate; integration tests spawn the real `mock-backend` binary through the
   plugin host (no models needed). `cargo test --workspace` must pass offline.
+- The mock bidirectional-backpressure regression uses a test-only 15 s per-call
+  deadlock watchdog, not a latency target: debug JSON/pipe I/O and parallel host
+  scheduling need headroom. It still concurrently sends the full 1 MB echo request
+  and the unchanged flood, requiring both flood completion and the exact echo.
+  Production host timeouts are unchanged.
 - The CLI agent HTTP smoke builds its mock backend and three MCP tool binaries
   with `$CARGO build --offline` before launching Python. It derives the target
   directory/profile from Cargo's `lh` executable, so a clean `CARGO_TARGET_DIR`
