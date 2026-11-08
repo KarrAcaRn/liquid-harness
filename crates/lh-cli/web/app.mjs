@@ -7,6 +7,16 @@ export function requestBody(value) {
   if (new TextEncoder().encode(body).length > MAX_BODY) throw new Error('Conversation exceeds the 6 MiB request limit. Export it and start a new conversation or remove attachments.');
   return body;
 }
+// Ctrl+Enter in the focused message field submits the composer through the normal
+// form path (constraint validation, submit handler, busy guard). Plain Enter keeps
+// inserting a newline. Auto-repeat and IME composition never submit, so one press
+// sends at most one message.
+export function composerShortcut(event, form) {
+  if (event.key !== 'Enter' || !event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.isComposing) return false;
+  event.preventDefault();
+  if (!event.repeat) form.requestSubmit();
+  return true;
+}
 // Handles UTF-8 split across chunks, CR/LF/CRLF, comments and multiline data.
 export async function readSSE(body, onEvent) {
   if (!body) throw new Error('The server returned no stream.');
@@ -286,6 +296,7 @@ function boot() {
     }
   }
   $('composer').addEventListener('submit', event => send(event).catch(report));
+  $('prompt').addEventListener('keydown', event => composerShortcut(event, $('composer')));
   $('cancel').addEventListener('click', async () => {
     const run = active; if (!run) return;
     try {

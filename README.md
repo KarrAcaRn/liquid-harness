@@ -118,6 +118,7 @@ or encrypted storage. Select Auto route or a specialist. Agent mode explicitly
 enables tool execution with Allow/Deny/Always approvals and cancellation. Always
 means identical tool/arguments in this run only. Ordinary chat does not execute
 local tools. Expand route and agent details to inspect decisions and tool results.
+In the message field, Enter inserts a newline and Ctrl+Enter sends (same as Send).
 
 Attach images/audio or record a short clip (localhost/HTTPS and microphone
 permission required). Non-WAV recordings need backend ffmpeg support. Speak replies

@@ -573,6 +573,11 @@ executed backend while retaining the original routing reason. Audio chat's route
 still describes its input specialist, not a new routing call. Agent SSE already
 carries the full route and retained tool history.
 
+Ctrl+Enter in the focused message textarea calls `form.requestSubmit()`, so it
+shares the Send button's constraint validation, submit handler and busy guard.
+Plain Enter keeps its newline; auto-repeat and IME composition never submit. The
+listener is bound to the textarea only, never to `document`/`window`.
+
 Conversations/attachments are browser-local, unencrypted localStorage, with
 explicit storage-failure warnings and export. Streaming is parsed incrementally
 across UTF-8/chunk boundaries; incomplete answers are excluded from follow-up

@@ -69,6 +69,13 @@ Actual Chromium DOM checks against `scripts/web-smoke-server.py`, no models:
   export/reload warning; a browser probe confirmed the other snapshot remained
   untouched. Switching while a file was loading was rejected; New conversation
   after loading cleared pending media. Recording transitions use the same guard.
+- Ctrl+Enter (later addition), via trusted CDP key events against the mock
+  fixture: empty and whitespace-only prompts did not send (empty showed
+  `valueMissing`); plain Enter inserted a newline; Ctrl+Enter sent
+  `"line one\nline two"` without an extra newline and cleared the field; one
+  press plus three auto-repeat keydowns produced exactly one message; Ctrl+Enter
+  with text present but focus on the model select, Agent checkbox or page body
+  sent nothing; the Send button and Enter on a focused Send button still sent.
 
 ## Real model smoke through the UI
 
