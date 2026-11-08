@@ -559,7 +559,7 @@ transcription again. No automatic context truncation/summarization is performed.
 
 The default-on `web` feature implies `server`; `--no-default-features --features
 server` keeps the API without the UI. `GET`/`HEAD` on `/`, `/index.html`,
-`/app.mjs`, `/markdown.mjs`, `/stats.mjs`, `/style.css`, `/layout.css` serves compile-time embedded assets,
+`/app.mjs`, `/markdown.mjs`, `/stats.mjs`, `/settings.mjs`, `/style.css`, `/layout.css` serves compile-time embedded assets,
 not arbitrary filesystem paths. These immutable assets are public to bootstrap
 token entry; every API data/control request still requires the configured token.
 The UI sends it as a bearer header and stores it only in sessionStorage.
@@ -576,7 +576,7 @@ on small screens). `cargo test` runs `scripts/test-web.mjs` (behaviour, markup a
 layout contract) and `scripts/test-style.mjs` (tokens, contrast, states) when
 `node` is installed; review results in `docs/WEB-UI-REVIEW-RESULTS.md`.
 
-Hash navigation selects Chat/Plugins/Tools/Skills/Status. Read-only management
+Hash navigation selects Chat/Plugins/Tools/Skills/Status/Options. Read-only management
 uses existing M4b endpoints sequentially (parallel reads would contend for the
 nonblocking engine lock); busy errors are visible with an explicit Refresh.
 Router stage switches are displayed, not editable. Chat completion JSON and SSE
@@ -689,6 +689,39 @@ the binary WAV API and an audio player. Real hardware permissions, browser quota
 and model context windows remain external limits. Verification: [M4c](M4C-RESULTS.md).
 Target page structure, design rules and file ownership for the UI cleanup:
 [WEB-UI-PLAN](WEB-UI-PLAN.md).
+
+### Options
+
+`#options` is a browser-local page (no server reads; `management()` only shows it
+and refills the form). It holds one setting, "Default context for new chats", a
+multi-line `#default-context` textarea (at most 8000 characters) with Save,
+"Restore suggested text" (fills the field, still needs Save) and a hint that
+changes apply only to conversations created afterwards.
+
+Storage: localStorage key `lh.defaultContext`, value = the raw saved text, next
+to `lh.conversations` and `lh.theme`; it survives reloads and browser/server
+restarts and is per browser profile, like conversations. At every boot
+`settings.init()` writes the suggested German text (`SUGGESTED_DEFAULT_CONTEXT`:
+"Erfinde keine Zahlen und Fakten. …") only when the key is absent (new install
+or an installation from before this setting); any stored value, including `''`,
+is never overwritten. A deliberately empty (or whitespace-only) value disables
+the default context. Unsaved edits block page unload like a running answer; a
+save in another tab refreshes the field unless it has unsaved edits. If
+localStorage is unavailable or a write fails, the value is kept in memory for
+the tab and `#storage-warning` says so.
+
+Interface (`web/settings.mjs`, pure, storage injected so tests use a fake):
+`createSettings(storage)` returns `init()`, `defaultContext()` (raw text for the
+form, re-read on each call), `saveDefaultContext(text)` (exact text; throws only
+for non-strings or more than `MAX_DEFAULT_CONTEXT` characters, leaving the stored
+value unchanged; returns `{value, persisted}`) and
+`defaultContextForNewChat()`. `app.mjs` creates one instance, `settings`, in
+`boot()` before the first conversation is created. Contract for chat creation:
+call `settings.defaultContextForNewChat()` once when a conversation is created
+and snapshot the result into it: the trimmed text, or `''` meaning add nothing;
+a later save never touches existing conversations. (The chat-side snapshot and
+its use in model requests are a separate change; until then the setting is
+stored and editable but not yet applied.)
 
 ## 9. Configuration
 ### Agent execution and management (M4b)

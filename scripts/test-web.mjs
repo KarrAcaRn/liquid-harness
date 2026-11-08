@@ -5,7 +5,8 @@ import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
 import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
-for (const name of ['app.mjs','markdown.mjs','stats.mjs']) {
+import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
+for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
   const result = spawnSync(process.execPath,['--check',fileURLToPath(new URL(`../crates/lh-cli/web/${name}`,import.meta.url))],{encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
 }
@@ -177,4 +178,72 @@ assert.match(rule(layout,'#approvals'),/flex: 0 0 auto/);
 assert.doesNotMatch(rule(layout,'#approvals'),/overflow|max-height|min-height: 0/);
 assert.match(layout,/\.chat-main:has\(> #approvals:not\(:empty\)\) > #messages \{ min-height: 6rem; \}/);
 assert.match(source,/\$\('approvals'\)\.append\(card\);\s*\/\/[^\n]*\n\s*card\.scrollIntoView\(\{block:'nearest'\}\);/);
-console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, speak ID selection, generation stats and layout structure passed.');
+// Options: default context for new chats (docs/ARCHITECTURE.md "Options").
+class MemoryStorage { constructor(entries = {}) { this.map = new Map(Object.entries(entries)); this.writes = 0; } getItem(k) { return this.map.has(k) ? this.map.get(k) : null; } setItem(k,v) { this.writes++; this.map.set(k,String(v)); } removeItem(k) { this.map.delete(k); } }
+assert.equal(DEFAULT_CONTEXT_KEY,'lh.defaultContext');
+assert.equal(SUGGESTED_DEFAULT_CONTEXT,'Erfinde keine Zahlen und Fakten. Wenn du dir unsicher bist, führe eine Websuche durch. Wenn du nicht weißt, was in einer Datei steht, fordere das Lesen der Datei an.');
+{ // Initialization: fresh/older install without a stored value gets the suggested text once.
+  const storage = new MemoryStorage({'lh.conversations':'[]','lh.theme':'dark'}), settings = createSettings(storage);
+  assert.deepEqual(settings.init(),{value:SUGGESTED_DEFAULT_CONTEXT,created:true,persisted:true});
+  assert.equal(storage.getItem(DEFAULT_CONTEXT_KEY),SUGGESTED_DEFAULT_CONTEXT);
+  assert.equal(storage.getItem('lh.conversations'),'[]'); assert.equal(storage.getItem('lh.theme'),'dark');
+  assert.deepEqual(settings.init(),{value:SUGGESTED_DEFAULT_CONTEXT,created:false,persisted:true});
+  assert.deepEqual(createSettings(storage).init(),{value:SUGGESTED_DEFAULT_CONTEXT,created:false,persisted:true}); assert.equal(storage.writes,1);
+  assert.equal(settings.defaultContext(),SUGGESTED_DEFAULT_CONTEXT); assert.equal(settings.defaultContextForNewChat(),SUGGESTED_DEFAULT_CONTEXT);
+}
+for (const existing of ['Mein eigener Kontext\nZeile 2','',' \n ']) { // Stored values, including empty ones, are never overwritten.
+  const storage = new MemoryStorage({[DEFAULT_CONTEXT_KEY]:existing});
+  assert.deepEqual(createSettings(storage).init(),{value:existing,created:false,persisted:true});
+  assert.equal(storage.getItem(DEFAULT_CONTEXT_KEY),existing); assert.equal(storage.writes,0);
+}
+{ // Saving persists across a restart (new settings object over the same storage), text exact.
+  const storage = new MemoryStorage(), settings = createSettings(storage); settings.init();
+  const text = '  Antworte knapp.\nNenne Quellen.  ';
+  assert.deepEqual(settings.saveDefaultContext(text),{value:text,persisted:true});
+  const restarted = createSettings(storage);
+  assert.equal(restarted.init().created,false);
+  assert.equal(restarted.defaultContext(),text); assert.equal(restarted.defaultContextForNewChat(),'Antworte knapp.\nNenne Quellen.');
+  // Another tab's save is seen on the next read.
+  storage.setItem(DEFAULT_CONTEXT_KEY,'Aus Tab B'); assert.equal(settings.defaultContext(),'Aus Tab B');
+}
+{ // A deliberately empty (or whitespace-only) value disables the context and survives restarts.
+  const storage = new MemoryStorage(), settings = createSettings(storage); settings.init();
+  for (const empty of ['','  \n\t ']) {
+    assert.deepEqual(settings.saveDefaultContext(empty),{value:empty,persisted:true});
+    assert.equal(settings.defaultContextForNewChat(),'');
+    const restarted = createSettings(storage);
+    assert.deepEqual(restarted.init(),{value:empty,created:false,persisted:true});
+    assert.equal(restarted.defaultContext(),empty); assert.equal(restarted.defaultContextForNewChat(),'');
+  }
+}
+{ // Invalid input is rejected without touching the stored value.
+  const storage = new MemoryStorage({[DEFAULT_CONTEXT_KEY]:'alt'}), settings = createSettings(storage);
+  assert.throws(() => settings.saveDefaultContext('x'.repeat(MAX_DEFAULT_CONTEXT + 1)),/limited to 8000 characters/);
+  assert.throws(() => settings.saveDefaultContext(null),TypeError);
+  assert.equal(storage.getItem(DEFAULT_CONTEXT_KEY),'alt'); assert.equal(settings.saveDefaultContext('x'.repeat(MAX_DEFAULT_CONTEXT)).persisted,true);
+}
+{ // Unavailable or failing storage: no throw, value kept in memory for this tab, persisted false.
+  const none = createSettings(null);
+  assert.deepEqual(none.init(),{value:SUGGESTED_DEFAULT_CONTEXT,created:true,persisted:false});
+  assert.deepEqual(none.saveDefaultContext(''),{value:'',persisted:false}); assert.equal(none.defaultContext(),''); assert.equal(none.defaultContextForNewChat(),'');
+  const full = new MemoryStorage({[DEFAULT_CONTEXT_KEY]:'gespeichert'}); full.setItem = () => { throw new Error('QuotaExceededError'); };
+  const settings = createSettings(full);
+  assert.deepEqual(settings.saveDefaultContext('neu'),{value:'neu',persisted:false});
+  assert.equal(settings.defaultContext(),'neu'); assert.equal(full.getItem(DEFAULT_CONTEXT_KEY),'gespeichert');
+  const flaky = new MemoryStorage({[DEFAULT_CONTEXT_KEY]:'zuletzt'}), reader = createSettings(flaky); reader.init();
+  flaky.getItem = () => { throw new Error('SecurityError'); };
+  assert.equal(reader.defaultContext(),'zuletzt');
+}
+// Options markup: visible, editable textarea with label, hint and Save; app.mjs wiring.
+for (const id of ['options-page','options-form','default-context','default-context-hint','save-options','restore-default-context','options-status'])
+  assert.equal(html.split(`id="${id}"`).length,2,`exactly one #${id}`);
+assert.match(html,/<a href="#options">Options<\/a><\/nav>/);
+assert.match(html,/<label for="default-context">Default context for new chats<\/label><textarea id="default-context"/);
+assert.match(tag('default-context'),new RegExp(`maxlength="${MAX_DEFAULT_CONTEXT}"`)); assert.doesNotMatch(tag('default-context'),/readonly|disabled/);
+assert.match(html,/Changes apply only to conversations created after saving; existing conversations keep their context\./);
+assert.match(tag('save-options'),/class="button-primary" type="submit"/); assert.match(tag('restore-default-context'),/class="button-quiet"/);
+assert.match(source,/const settings = createSettings\(browserStorage\);\n\s*if \(!settings\.init\(\)\.persisted\)/);
+assert(source.indexOf('settings.init()') < source.indexOf("if (!conversations.length) fresh();"),'options initialize before the first conversation is created');
+assert.match(source,/\['plugins','tools','skills','status','options'\]/); assert.match(source,/if \(page === 'options'\) \{ loadOptions\(\); return; \}/);
+assert.match(source,/settings\.saveDefaultContext\(\$\('default-context'\)\.value\)/);
+console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, speak ID selection, generation stats, layout structure and default-context options passed.');

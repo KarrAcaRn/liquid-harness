@@ -196,6 +196,7 @@ fn embedded_ui_is_public_but_api_remains_authenticated() {
         ("/app.mjs", "text/javascript", "readSSE"),
         ("/markdown.mjs", "text/javascript", "escapeHTML"),
         ("/stats.mjs", "text/javascript", "normalizeStats"),
+        ("/settings.mjs", "text/javascript", "lh.defaultContext"),
         ("/style.css", "text/css", "prefers-color-scheme"),
         ("/layout.css", "text/css", "#chat-page"),
     ] {

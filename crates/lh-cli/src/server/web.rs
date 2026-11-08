@@ -22,6 +22,10 @@ pub(super) fn asset(method: &Method, path: &str) -> Option<Reply> {
             include_str!("../../web/stats.mjs"),
             "text/javascript; charset=utf-8",
         ),
+        "/settings.mjs" => (
+            include_str!("../../web/settings.mjs"),
+            "text/javascript; charset=utf-8",
+        ),
         "/style.css" => (
             include_str!("../../web/style.css"),
             "text/css; charset=utf-8",

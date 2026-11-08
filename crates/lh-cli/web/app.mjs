@@ -1,5 +1,6 @@
 import { renderMarkdown } from './markdown.mjs';
 import { startStats, completeStats, endStats, restoreStats, latestStats, formatStats } from './stats.mjs';
+import { createSettings, DEFAULT_CONTEXT_KEY, SUGGESTED_DEFAULT_CONTEXT } from './settings.mjs';
 
 export const MAX_BODY = 6 * 1024 * 1024;
 export const MAX_ATTACHMENTS = 4 * 1024 * 1024;
@@ -87,6 +88,18 @@ function boot() {
   const storageWarning = text => { $('storage-warning').hidden = false; $('storage-warning').textContent = text; };
   try { token = sessionStorage.getItem('lh.token') || ''; } catch { storageWarning('Session storage unavailable: the token will only remain in memory.'); }
   $('token').value = token;
+  // Options (docs/ARCHITECTURE.md "Options"). Chat creation reads the snapshot text
+  // via settings.defaultContextForNewChat(); '' means no default context.
+  let browserStorage = null; try { browserStorage = localStorage; } catch { /* createSettings keeps options in memory. */ }
+  const settings = createSettings(browserStorage);
+  if (!settings.init().persisted) storageWarning('Options cannot be saved in this browser: changes apply in this tab only.');
+  let optionsLoaded = null; // Text last loaded into or saved from #default-context.
+  const optionsDirty = () => optionsLoaded !== null && $('default-context').value !== optionsLoaded;
+  // Refills the form from storage unless it holds unsaved edits.
+  function loadOptions() {
+    if (optionsDirty()) return;
+    optionsLoaded = settings.defaultContext(); $('default-context').value = optionsLoaded; $('options-status').textContent = '';
+  }
   try {
     const raw = localStorage.getItem('lh.conversations');
     savedSnapshot = raw;
@@ -322,11 +335,12 @@ function boot() {
     if (!answer.error && typeof speakId === 'string' && answer.content.trim()) await speak(answer.content, speakId);
   }
   async function management() {
-    const page = ['plugins','tools','skills','status'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chat';
+    const page = ['plugins','tools','skills','status','options'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'chat';
     document.querySelectorAll('nav a').forEach(a => { if (a.hash === `#${page}`) a.setAttribute('aria-current','page'); else a.removeAttribute('aria-current'); });
-    $('chat-page').hidden = page !== 'chat'; $('management-page').hidden = page === 'chat';
-    document.body.dataset.page = page; // layout.css: the chat view fits the viewport, management pages scroll.
+    $('chat-page').hidden = page !== 'chat'; $('options-page').hidden = page !== 'options'; $('management-page').hidden = page === 'chat' || page === 'options';
+    document.body.dataset.page = page; // layout.css: the chat view fits the viewport, other pages scroll.
     const version = ++pageVersion; if (page === 'chat') return;
+    if (page === 'options') { loadOptions(); return; } // Browser-local: no server reads.
     $('page-title').textContent = page[0].toUpperCase()+page.slice(1); $('management-content').replaceChildren(); $('page-status').textContent = 'Loading…';
     const paths = page === 'plugins' ? ['plugins','specialists','router'] : page === 'status' ? ['status','router'] : [page];
     // Parallel management reads contend for the nonblocking engine lock.
@@ -429,7 +443,21 @@ function boot() {
       storageWarning('Browser conversation storage changed in another tab. Saving paused. Export this tab before reloading to avoid losing either version.');
     }
   });
-  window.addEventListener('beforeunload',event => { if (active || recorder || !$('storage-warning').hidden) { event.preventDefault(); event.returnValue = ''; } });
+  $('options-form').addEventListener('submit',event => {
+    event.preventDefault();
+    try {
+      const saved = settings.saveDefaultContext($('default-context').value); optionsLoaded = saved.value;
+      if (!saved.persisted) storageWarning('Options could not be saved in browser storage; they apply in this tab only.');
+      $('options-status').textContent = `${saved.persisted ? 'Saved' : 'Saved for this tab only'}. ${saved.value.trim() ? 'New conversations start with this context.' : 'New conversations start without a default context.'}`;
+    } catch (error) { report(error); }
+  });
+  $('default-context').addEventListener('input',() => { $('options-status').textContent = optionsDirty() ? 'Unsaved changes.' : ''; });
+  $('restore-default-context').addEventListener('click',() => { $('default-context').value = SUGGESTED_DEFAULT_CONTEXT; $('options-status').textContent = optionsDirty() ? 'Unsaved changes.' : ''; $('default-context').focus(); });
+  window.addEventListener('storage',event => {
+    if (event.key !== DEFAULT_CONTEXT_KEY && event.key !== null) return;
+    if (optionsDirty()) $('options-status').textContent = 'Changed in another tab. Saving here replaces that version.'; else loadOptions();
+  });
+  window.addEventListener('beforeunload',event => { if (active || recorder || optionsDirty() || !$('storage-warning').hidden) { event.preventDefault(); event.returnValue = ''; } });
   if (!conversations.length) fresh(); else { selected = conversations[0].id; render(); }
   models().catch(report); management().catch(report);
 }

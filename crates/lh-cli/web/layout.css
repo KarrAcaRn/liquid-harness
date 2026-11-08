@@ -122,6 +122,11 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
 .card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2, .5rem); margin: var(--space-3, .75rem) 0; }
 .meta-block h4 { margin: var(--space-4, 1rem) 0 var(--space-2, .5rem); }
 
+/* Options: one readable column; the hint sits between the field and its actions. */
+#options-form { display: flex; flex-direction: column; gap: var(--space-2, .5rem); max-width: 48rem; margin: var(--space-5, 1.5rem) 0 0; }
+#options-form > h3, #options-form > p { margin: 0; }
+.form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
+
 @media (max-width: 760px) {
   /* Row 1: brand + theme toggle; row 2: the nav. It wraps instead of scrolling so
      focus rings are never clipped by a scroll box (one row down to ~350px). */
