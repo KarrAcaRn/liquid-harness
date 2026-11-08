@@ -647,6 +647,11 @@ User `[plugins.<id>.config]` settings shallowly override manifest `[config]` key
 
 - Unit tests per crate; integration tests spawn the real `mock-backend` binary through the
   plugin host (no models needed). `cargo test --workspace` must pass offline.
+- The CLI agent HTTP smoke builds its mock backend and three MCP tool binaries
+  with `$CARGO build --offline` before launching Python. It derives the target
+  directory/profile from Cargo's `lh` executable, so a clean `CARGO_TARGET_DIR`
+  needs no manual workspace prebuild. Smoke output has RAII cleanup, including
+  assertion failures; a regression test checks cleanup during unwinding.
 - FreeToken spawn fixtures (unit tests and `tests/process.rs`) share the test-only
   `FIXTURE_STARTUP_SECS` = 5 s budget for interpreter/server startup; the
   integration test owns its temp dir and plugin child with RAII guards.
