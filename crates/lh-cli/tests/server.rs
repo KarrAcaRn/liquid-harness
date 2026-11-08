@@ -232,13 +232,19 @@ fn embedded_ui_is_public_but_api_remains_authenticated() {
 #[test]
 #[cfg(feature = "web")]
 fn javascript_checks_when_node_is_installed() {
-    let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/test-web.mjs");
-    match Command::new("node").arg(script).status() {
-        Ok(status) => assert!(status.success()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            eprintln!("Skipping web JS checks: node not on PATH")
+    // test-web.mjs: behaviour and layout contract; test-style.mjs: design tokens, contrast, states.
+    for name in ["test-web.mjs", "test-style.mjs"] {
+        let script = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../scripts")
+            .join(name);
+        match Command::new("node").arg(script).status() {
+            Ok(status) => assert!(status.success(), "{name} failed"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("Skipping web JS checks: node not on PATH");
+                return;
+            }
+            Err(error) => panic!("node failed: {error}"),
         }
-        Err(error) => panic!("node failed: {error}"),
     }
 }
 

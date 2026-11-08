@@ -176,7 +176,7 @@ function boot() {
     line.hidden = !view; line.textContent = view?.text || ''; line.title = view?.title || ''; line.dataset.phase = view?.phase || '';
   }
   function render() {
-    $('conversation-title').textContent = current()?.title || 'New conversation';
+    $('conversation-title').textContent = $('conversation-title').title = current()?.title || 'New conversation';
     $('conversation-list').replaceChildren(...conversations.map(c => { const b = button(c.title, () => { if (!canChangeConversation()) return; selected = c.id; render(); }); b.className = c.id === selected ? 'conversation-item selected' : 'conversation-item'; b.setAttribute('aria-current',String(c.id === selected)); return b; }));
     renderMessages();
   }
@@ -254,6 +254,8 @@ function boot() {
       catch (error) { controls.forEach(b => b.disabled = false); throw error; }
     }));
     $('approvals').append(card);
+    // The card may sit below the fold on small screens: bring it into view (no-op when visible).
+    card.scrollIntoView({block:'nearest'});
   }
   async function send(event) {
     event.preventDefault(); if (active) return;

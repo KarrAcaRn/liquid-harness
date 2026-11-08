@@ -158,4 +158,23 @@ assert.deepEqual([...new Set(layout.match(/@media[^{]+/g).map(s => s.trim()))],[
 assert.doesNotMatch(layout,/var\(--[a-z0-9-]+\)/,'every token has a fallback');
 assert.doesNotMatch(layout,/(^|[\s;{])order\s*:/,'no CSS order: DOM order is visual order');
 assert.doesNotMatch(layout,/(^|[\s;{])(color|background|border-color|font|box-shadow|border-radius)\s*:/m,'visual properties belong to style.css');
+// Regressions found in review t_bf3172bc (Chromium probes at 1920-320 px):
+// long conversation titles pushed Send below the fold (clamp 1 line desktop / 2 mobile, full text kept as title),
+const rule = (text, selector) => { const start = text.indexOf(`${selector} {`); assert(start >= 0, `missing ${selector}`); return text.slice(start, text.indexOf('}', start)); };
+const mobile = layout.slice(layout.indexOf('@media (max-width: 760px)'));
+assert.match(rule(layout,'.conversation-header h2'),/-webkit-line-clamp: 1;[^}]*overflow: hidden/);
+assert.match(rule(mobile,'.conversation-header h2'),/-webkit-line-clamp: 2/);
+assert.match(source,/\$\('conversation-title'\)\.textContent = \$\('conversation-title'\)\.title = /);
+// badges overlapped card titles, mobile conversation items were wider than their scroll box (clipped focus ring),
+assert.match(rule(layout,'.card-header .badges'),/min-width: 0;[^}]*max-width: 60%/);
+assert.match(rule(mobile,'.conversation-item'),/max-width: min\(12\.5rem, 100%\)/);
+assert.match(rule(mobile,'#conversation-list'),/scroll-padding-inline: var\(--space-2, \.5rem\)/);
+// and the native file input spilled past the 320 px gutter.
+assert.match(rule(layout,'.file-label'),/max-width: 100%; min-width: 0/);
+// A pending approval card collapsed to 0 px (1024x768, mobile) or clipped its buttons (1366x900):
+// it must never shrink; #messages yields space instead, and the card is scrolled into view.
+assert.match(rule(layout,'#approvals'),/flex: 0 0 auto/);
+assert.doesNotMatch(rule(layout,'#approvals'),/overflow|max-height|min-height: 0/);
+assert.match(layout,/\.chat-main:has\(> #approvals:not\(:empty\)\) > #messages \{ min-height: 6rem; \}/);
+assert.match(source,/\$\('approvals'\)\.append\(card\);\s*\/\/[^\n]*\n\s*card\.scrollIntoView\(\{block:'nearest'\}\);/);
 console.log('Web: syntax, escaped Markdown, chunked UTF-8 SSE, body limits, Ctrl+Enter shortcut, speak ID selection, generation stats and layout structure passed.');

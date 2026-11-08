@@ -1,8 +1,6 @@
 /* Layout and placement only (docs/WEB-UI-PLAN.md sections 4 and 6).
    Colours, borders, radii, fonts, shadows and component padding live in style.css,
-   which loads first. This file wins over the legacy layout block at the end of
-   style.css and resets legacy properties the target structure does not want.
-   Tokens are consumed with literal fallbacks; single breakpoint: 760px. */
+   which loads first. Tokens are consumed with literal fallbacks; single breakpoint: 760px. */
 
 /* App shell: header row (brand, nav, theme), connection strip, notices, view. */
 .app-header, .connection, .notices, main { width: 100%; max-width: 1440px; margin: 0 auto; }
@@ -58,7 +56,12 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
 
 .chat-main { display: flex; flex-direction: column; gap: var(--space-2, .5rem); min-width: 0; min-height: 0; }
 .conversation-header { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); flex-shrink: 0; }
-.conversation-header h2 { flex: 1 1 12rem; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+/* Long titles are clamped so they cannot push the composer off-screen; the full
+   title stays in the DOM (accessible name), the title attribute and the sidebar list. */
+.conversation-header h2 {
+  flex: 1 1 12rem; min-width: 0; margin: 0; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden;
+}
 .conversation-actions { display: flex; flex-wrap: nowrap; gap: var(--space-2, .5rem); }
 
 #messages {
@@ -66,8 +69,11 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
   flex: 1 1 0; min-height: 10rem; max-height: none; overflow: auto;
   padding: var(--space-2, .5rem);
 }
-#approvals { flex: 0 1 auto; min-height: 0; overflow: auto; }
+/* A pending approval card is never squeezed: #messages gives up space first (down to
+   6rem), then the document scrolls as the small-screen fallback. */
+#approvals { flex: 0 0 auto; }
 #approvals:empty { display: none; }
+.chat-main:has(> #approvals:not(:empty)) > #messages { min-height: 6rem; }
 .approval-actions { margin: var(--space-3, .75rem) 0 0; }
 /* Status row: run status left, generation statistics right; wraps on narrow screens. */
 .chat-status { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 var(--space-4, 1rem); flex-shrink: 0; }
@@ -82,8 +88,8 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
 .composer-options, .composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); }
 .composer-model, .composer-media, .composer-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
 .check { display: inline-flex; align-items: center; gap: var(--space-2, .5rem); }
-.file-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
-.file-label input { display: inline-block; max-width: 100%; }
+.file-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); max-width: 100%; min-width: 0; }
+.file-label input { display: inline-block; max-width: 100%; min-width: 0; }
 /* Send is the trailing control; Cancel sits directly before it. */
 .composer-submit { flex-wrap: nowrap; margin-left: auto; }
 #speech-player { flex-shrink: 0; }
@@ -105,7 +111,7 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
 /* Name left, state badges right: both always start on the card's first row. */
 .card-header { display: flex; flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; gap: var(--space-2, .5rem); }
 .card-header h4 { flex: 1 1 auto; min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.card-header .badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1, .25rem); max-width: 60%; }
+.card-header .badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1, .25rem); flex: 0 1 auto; min-width: 0; max-width: 60%; }
 /* Long paths and JSON in metadata wrap inside the card instead of widening the page. */
 .panel dd { min-width: 0; overflow-wrap: anywhere; }
 /* Key/value grid placement only; dt/dd typography and colour belong to style.css. */
@@ -139,8 +145,9 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
     gap: var(--space-1, .25rem) var(--space-2, .5rem); padding: 0 0 var(--space-2, .5rem);
   }
   .sidebar-header { grid-column: 1 / -1; flex-wrap: nowrap; }
-  #conversation-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; }
-  .conversation-item { flex: 0 0 auto; width: auto; max-width: 12.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #conversation-list { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; scroll-padding-inline: var(--space-2, .5rem); }
+  /* An item never exceeds the visible list width, so its text and focus ring stay inside the scroll box. */
+  .conversation-item { flex: 0 0 auto; width: auto; max-width: min(12.5rem, 100%); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sidebar-footer p { display: none; }
 
   #messages { min-height: 120px; }
@@ -157,7 +164,7 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
   .composer-model select { flex: 1 1 auto; min-width: 0; }
   .composer-model button { flex-shrink: 0; }
   .conversation-header { flex-wrap: nowrap; }
-  .conversation-header h2 { flex: 1 1 0; }
+  .conversation-header h2 { flex: 1 1 0; -webkit-line-clamp: 2; line-clamp: 2; }
   /* Record audio shares the row with Cancel and Send (DOM order unchanged). */
   .composer-media { display: contents; }
 }

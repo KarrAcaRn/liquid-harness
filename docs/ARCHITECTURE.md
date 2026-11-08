@@ -570,7 +570,11 @@ base URLs or framing. No inline scripts/styles, eval, CDN or runtime framework.
 after it) holds placement only: the app shell, the chat view that fits the
 viewport (`body[data-page=chat]`, set by `app.mjs`; only `#messages` scrolls),
 composer rows with Send as the trailing control, and the management card grid.
-Both share one breakpoint (760 px); see `docs/WEB-UI-PLAN.md`.
+Both share one breakpoint (760 px); see `docs/WEB-UI-PLAN.md`. A pending
+approval card never shrinks (`#messages` yields space, then the document scrolls
+on small screens). `cargo test` runs `scripts/test-web.mjs` (behaviour, markup and
+layout contract) and `scripts/test-style.mjs` (tokens, contrast, states) when
+`node` is installed; review results in `docs/WEB-UI-REVIEW-RESULTS.md`.
 
 Hash navigation selects Chat/Plugins/Tools/Skills/Status. Read-only management
 uses existing M4b endpoints sequentially (parallel reads would contend for the

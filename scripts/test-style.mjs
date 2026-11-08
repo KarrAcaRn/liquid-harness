@@ -5,9 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../crates/lh-cli/web/style.css', import.meta.url), 'utf8');
-const legacyMarker = '/* legacy layout – superseded by layout.css, removed in t_bf3172bc */';
-// Design part only: the legacy layout block is kept verbatim until the review task deletes it.
-const design = css.includes(legacyMarker) ? css.slice(0, css.indexOf(legacyMarker)) : css;
+const design = css;
 
 const block = selector => {
   const start = design.indexOf(selector + ' {');
@@ -94,8 +92,15 @@ assert.doesNotMatch(design, /\.approval[^{]*button/, 'approval buttons must not 
 for (const selector of ['#chat-page', '.chat-main', '.composer-options', '.composer-actions', '.card-grid', '.page-header', '.app-header {'])
   assert(!design.includes(selector), `layout selector ${selector} belongs to layout.css`);
 
-// Legacy layout block is kept (removed by t_bf3172bc) and contains no design tokens.
-assert(css.includes(legacyMarker), 'legacy layout block marker');
-assert.doesNotMatch(css.slice(css.indexOf(legacyMarker)), /--[\w-]+:/, 'legacy block must not define tokens');
+// The legacy layout block was removed after both stylesheets were merged (review t_bf3172bc):
+// no bare element layout rules may come back and fight layout.css.
+assert(!css.includes('legacy layout'), 'legacy layout block must stay removed');
+for (const pattern of [/(^|\n)header\s*[,{]/, /(^|\n)nav\s*[,{]/, /(^|\n)main\s*[,{]/, /(^|\n)aside\s*[,{]/, /(^|\n)\s*#messages\s*\{/, /(^|\n)\s*#attachments\s*\{/, /\.toolbar\s*\{/])
+  assert.doesNotMatch(css, pattern, `layout rule ${pattern} belongs to layout.css`);
+// Kept from the legacy block on purpose: the mobile conversation strip divider.
+assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*\.conversations \{ border-bottom: 1px solid var\(--line\); \}/);
+// Regression (t_bf3172bc): nowrap badges overflowed card titles and the 320px viewport.
+assert.doesNotMatch(block('.badge'), /white-space:\s*nowrap/, 'badges must be able to wrap');
+assert.match(block('.badge'), /max-width: 100%/);
 
 console.log('style checks ok');
