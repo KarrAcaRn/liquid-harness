@@ -652,6 +652,15 @@ on small screens). `cargo test` runs `scripts/test-web.mjs` (behaviour, markup a
 layout contract) and `scripts/test-style.mjs` (tokens, contrast, states) when
 `node` is installed; review results in `docs/WEB-UI-REVIEW-RESULTS.md`.
 
+The chat "Model" `<select id="model">` has no separate refresh control: the list
+is loaded at start, after a token change and every time the dropdown is opened
+(`pointerdown` or an opening key, `opensSelect(event)`). Loads go through
+`singleFlight`, so overlapping opens share one `GET /v1/models` request.
+`modelOptions(catalog, previous)` dedupes the ids and keeps the current choice
+while it is still offered (else the first entry); an unchanged list is not
+rebuilt, so an already open popup stays put. While loading the select carries
+`aria-busy`; a failed load leaves the previous options usable and is reported.
+
 Hash navigation selects Chat/Plugins/Tools/Skills/Status/Options. Read-only management
 uses existing M4b endpoints sequentially (parallel reads would contend for the
 nonblocking engine lock); busy errors are visible with an explicit Refresh.

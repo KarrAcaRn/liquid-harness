@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel,newBinaryAvailable,aboutModels,restartedSince} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel,newBinaryAvailable,aboutModels,restartedSince,modelOptions,opensSelect,singleFlight} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
@@ -25,6 +25,24 @@ for (let size = 1; size <= bytes.length; size++) {
   assert.deepEqual(events,[{event:'delta',data:'{"content":"Grüße 😀"}'},{event:'message',data:'a\nb'},{event:'message',data:'[DONE]'}]);
 }
 assert.equal(requestBody({hello:'世界'}),'{"hello":"世界"}');
+// Model dropdown: rebuilt on open, ids once, selection kept while still offered.
+assert.deepEqual(modelOptions([{id:'auto'},{id:'a'},{id:'a'},{id:''},{},null,{id:7},{id:'b'}],'b'),{options:[{value:'auto',label:'Auto route'},{value:'a',label:'a'},{value:'b',label:'b'}],selected:'b'});
+assert.equal(modelOptions([{id:'auto'},{id:'a'}],'gone').selected,'auto');
+assert.deepEqual(modelOptions(undefined,'a'),{options:[],selected:''});
+assert.equal(opensSelect({type:'pointerdown',button:0}),true);
+assert.equal(opensSelect({type:'pointerdown',button:2}),false);
+for (const init of [{key:'F4'},{key:'ArrowDown',altKey:true},{key:'ArrowUp',altKey:true},{key:' '},{key:'Enter'}]) assert.equal(opensSelect({type:'keydown',...init}),true,JSON.stringify(init));
+for (const init of [{key:'ArrowDown'},{key:'a'},{key:'Tab'},{key:' ',ctrlKey:true}]) assert.equal(opensSelect({type:'keydown',...init}),false,JSON.stringify(init));
+assert.equal(opensSelect({type:'focus'}),false);
+{
+  let calls = 0, release; const flight = singleFlight(() => { calls++; return new Promise(r => { release = r; }); });
+  const first = flight(), second = flight(), third = flight();
+  assert.equal(first,second); assert.equal(second,third);
+  await Promise.resolve(); release('ok'); assert.equal(await first,'ok'); assert.equal(calls,1);
+  const failing = singleFlight(() => { calls++; throw new Error('down'); });
+  await assert.rejects(failing(),/down/); await assert.rejects(failing(),/down/); assert.equal(calls,3);
+  const again = flight(); await Promise.resolve(); release('again'); assert.equal(await again,'again'); assert.equal(calls,4,'a new run starts after the previous one settled');
+}
 // Model lifecycle: loading events and status entries.
 assert.equal(loadingLabel({specialist:'lfm3-text'}),'Loading lfm3-text…');
 assert.equal(loadingLabel({specialist:'lfm3-text',progress:0.424,eta_ms:2100}),'Loading lfm3-text… 42% ~3 s left');
@@ -94,7 +112,7 @@ for (const junk of [0,1,{},['mock-speak']]) assert.equal(resolveSpeakSelection(j
 assert.match(source,/api\('\/v1\/audio\/speech',\{value:\{model:id,input:text,response_format:'wav'\}\}\)/);
 assert.doesNotMatch(source,/audio\/speech',\{value:\{model:'auto'/);
 assert.match(source,/typeof speakId === 'string' && answer\.content\.trim\(\)\) await speak\(answer\.content, speakId\)/);
-assert.match(source,/speakCatalog = data\.data \|\| \[\]; syncSpeak\(\);/);
+assert.match(source,/speakCatalog = catalog; syncSpeak\(\);/);
 assert.match(source,/\$\('model'\)\.addEventListener\('change',syncSpeak\)/);
 // "Speak replies" dropdown: "<none>" first, then each offered ID once; the shown value mirrors the choice.
 const labels = view => view.options.map(o => o.label);
@@ -195,12 +213,17 @@ const web = name => readFileSync(fileURLToPath(new URL(`../crates/lh-cli/web/${n
 const html = web('index.html'), layout = web('layout.css').replace(/\/\*[\s\S]*?\*\//g,'');
 assert(html.indexOf('href="/style.css"') >= 0 && html.indexOf('href="/style.css"') < html.indexOf('href="/layout.css"'),'layout.css loads after style.css');
 assert.doesNotMatch(html,/\sstyle=/,'no inline style attributes (CSP style-src self)');
-for (const id of ['composer','prompt','send','cancel','model','agent','speak','files','record','attachments','approvals','messages','run-status','chat-stats','conversation-list','conversation-title','new-chat','rename-chat','delete-chat','export','auth-form','token','clear-token','theme','notice','storage-warning','chat-page','management-page','page-title','page-status','refresh-page','management-content','refresh-models','speech-player'])
+for (const id of ['composer','prompt','send','cancel','model','agent','speak','files','record','attachments','approvals','messages','run-status','chat-stats','conversation-list','conversation-title','new-chat','rename-chat','delete-chat','export','auth-form','token','clear-token','theme','notice','storage-warning','chat-page','management-page','page-title','page-status','refresh-page','management-content','speech-player'])
   assert.equal(html.split(`id="${id}"`).length,2,`exactly one #${id}`);
 assert.equal(html.match(/<h1[\s>]/g).length,1);
 const tag = id => html.match(new RegExp(`<[a-z]+ id="${id}"[^>]*>`))[0];
 assert.match(tag('send'),/class="button-primary"/); assert.match(tag('delete-chat'),/class="button-danger"/);
-for (const id of ['theme','refresh-models','clear-token','export']) assert.match(tag(id),/class="button-quiet"/,id);
+for (const id of ['theme','clear-token','export']) assert.match(tag(id),/class="button-quiet"/,id);
+// No separate model refresh control: the Model dropdown refreshes itself when opened.
+assert.doesNotMatch(html,/refresh-models|Refresh models/i); assert.doesNotMatch(source,/refresh-models/);
+assert.match(html,/<div class="composer-model"><label for="model">Model<\/label><select id="model"><option value="auto">Auto route<\/option><\/select><\/div>/);
+assert.match(source,/\$\('model'\)\.addEventListener\('pointerdown',refreshModelsOnOpen\); \$\('model'\)\.addEventListener\('keydown',refreshModelsOnOpen\);/);
+assert.match(source,/const models = singleFlight\(/);
 assert.match(html,/<button class="button-primary" type="submit">Save token<\/button>/);
 // Send is the last control of the composer action row, Cancel directly before it.
 assert.match(html,/<div class="composer-submit"><button id="cancel"[^>]*>Cancel<\/button><button id="send"[^>]*>Send<\/button><\/div><\/div>/);

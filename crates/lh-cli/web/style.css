@@ -104,7 +104,7 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .button-danger:hover:not(:disabled), #delete-chat:hover:not(:disabled) { background: var(--error-bg); border-color: var(--error); color: var(--error); }
 .button-danger:active:not(:disabled), #delete-chat:active:not(:disabled) { background: var(--error-bg); }
 
-/* Quiet: low emphasis (Toggle theme, Refresh models, Copy code, Clear token, Export). */
+/* Quiet: low emphasis (Toggle theme, Copy code, Clear token, Export). */
 .button-quiet { background: transparent; border-color: transparent; color: var(--muted); }
 .button-quiet:hover:not(:disabled) { background: var(--hover); border-color: var(--line-strong); color: var(--text); }
 

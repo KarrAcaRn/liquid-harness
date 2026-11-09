@@ -172,10 +172,9 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
   #composer > label[for=prompt] { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   #prompt { height: 4.5rem; min-height: 4.5rem; }
   #attachments { max-height: 6rem; }
-  /* Model select shrinks so Refresh models stays on its row. */
+  /* Model select fills its own row next to its label. */
   .composer-model { flex-wrap: nowrap; width: 100%; }
   .composer-model select { flex: 1 1 auto; min-width: 0; }
-  .composer-model button { flex-shrink: 0; }
   .conversation-header { flex-wrap: nowrap; }
   .conversation-header h2 { flex: 1 1 0; -webkit-line-clamp: 2; line-clamp: 2; }
   /* Record audio shares the row with Cancel and Send (DOM order unchanged). */

@@ -97,7 +97,8 @@ All IDs used by `app.mjs`/tests stay (`composer`, `prompt`, `send`, `cancel`,
 `new-chat`, `rename-chat`, `delete-chat`, `export`, `auth-form`, `token`,
 `clear-token`, `theme`, `notice`, `storage-warning`, `chat-page`,
 `management-page`, `page-title`, `page-status`, `refresh-page`,
-`management-content`, `refresh-models`, `speech-player`). Wrappers and classes
+`management-content`, `speech-player`; `refresh-models` was later removed –
+the model list refreshes when `#model` is opened). Wrappers and classes
 may be added; DOM order must equal visual order (no CSS `order` that breaks
 tab order).
 
@@ -128,7 +129,7 @@ main                (view)
     #composer
       textarea#prompt (+ label "Message")
       #attachments
-      .composer-options: Model select + Refresh models (quiet) | Agent mode | Speak replies
+      .composer-options: Model select (refreshes on open) | Agent mode | Speak replies
       .composer-actions: [Attach images or audio][Record audio] + hint "max 4 MiB per turn"   …   [Cancel][Send (primary)]
       hint: request limit 6 MiB
     #run-status (status line directly above .composer-actions or composer)
@@ -221,7 +222,7 @@ Component classes (styled in `style.css`, applied by markup in
 | `button` (default) | secondary action |
 | `.button-primary` (+ fallback `#send`) | one per region: Send; Save token |
 | `.button-danger` (+ fallback `#delete-chat`) | destructive: Delete conversation |
-| `.button-quiet` | low emphasis: Toggle theme, Refresh models, Copy code, Clear token |
+| `.button-quiet` | low emphasis: Toggle theme, Copy code, Clear token |
 | `.alert`, `[data-kind=error]` (default) / `[data-kind=info]` | `#notice`, `#storage-warning` |
 | `.badge`, `.badge-ok`, `.badge-warn`, `.badge-muted` | state labels on cards |
 | `dl.meta` | key/value metadata grid |

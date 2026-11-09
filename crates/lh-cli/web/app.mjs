@@ -72,6 +72,25 @@ export function speakOptions(available, choice) {
 }
 // Option value → setting: '' ("<none>") and anything that is not a nonempty string → null.
 export function speakChoiceFromValue(value) { return typeof value === 'string' && value ? value : null; }
+// The chat "Model" dropdown, rebuilt from `/v1/models` whenever it is opened: each ID
+// once, `auto` labelled "Auto route". `selected` keeps `previous` while it is still
+// offered, otherwise falls back to the first option.
+export function modelOptions(catalog, previous) {
+  const ids = [...new Set((Array.isArray(catalog) ? catalog : []).map(m => m?.id).filter(id => typeof id === 'string' && id))];
+  const options = ids.map(id => ({ value: id, label: id === 'auto' ? 'Auto route' : id }));
+  return { options, selected: ids.includes(previous) ? previous : (ids[0] ?? '') };
+}
+// Native <select> has no "open" event: a pointer press or an opening key stands in for it.
+export function opensSelect(event) {
+  if (event?.type === 'pointerdown') return event.button === 0 || event.button === undefined;
+  if (event?.type !== 'keydown') return false;
+  return event.key === 'F4' || ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && event.altKey) || ((event.key === ' ' || event.key === 'Enter') && !event.altKey && !event.ctrlKey && !event.metaKey);
+}
+// Wraps an async function so overlapping calls share one in-flight run (no duplicate requests).
+export function singleFlight(run) {
+  let pending = null;
+  return () => pending ??= Promise.resolve().then(run).finally(() => { pending = null; });
+}
 // Model lifecycle (docs/ARCHITECTURE.md "Model lifecycle"): `model_loading`
 // stream events and `/lh/v1/status` entries share these fields.
 export function loadingLabel(model) {
@@ -281,12 +300,20 @@ function boot() {
     }
     return response;
   }
-  async function models() {
-    const data = await (await api('/v1/models')).json(), previous = $('model').value;
-    $('model').replaceChildren(...(data.data || []).map(m => { const o = el('option', m.id === 'auto' ? 'Auto route' : m.id); o.value = m.id; return o; }));
-    if ([...$('model').options].some(o => o.value === previous)) $('model').value = previous;
-    speakCatalog = data.data || []; syncSpeak();
-  }
+  // Refreshes the model list (startup, token change, every dropdown open). On failure the
+  // current options stay untouched. An unchanged list is not rebuilt, so an open popup stays put.
+  const models = singleFlight(async () => {
+    const select = $('model'); select.setAttribute('aria-busy', 'true');
+    try {
+      const data = await (await api('/v1/models')).json(), catalog = Array.isArray(data?.data) ? data.data : [];
+      const { options, selected } = modelOptions(catalog, select.value);
+      const same = options.length === select.options.length && options.every((o, i) => select.options[i].value === o.value && select.options[i].textContent === o.label);
+      if (!same && options.length) select.replaceChildren(...options.map(o => { const option = el('option', o.label); option.value = o.value; return option; }));
+      if (options.length) select.value = selected;
+      speakCatalog = catalog; syncSpeak();
+    } finally { select.removeAttribute('aria-busy'); }
+  });
+  const refreshModelsOnOpen = event => { if (opensSelect(event)) models().catch(report); };
   // Recomputes the speak IDs of the selected model and drops a choice it does not offer.
   function syncSpeak() {
     if (speakCatalog === null) return;
@@ -565,7 +592,8 @@ function boot() {
   $('theme').addEventListener('click',() => { const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; const next = dark ? 'light' : 'dark'; document.documentElement.dataset.theme = next; try { localStorage.setItem('lh.theme',next); } catch { notice('Theme changed for this tab; browser storage unavailable.'); } });
   $('model').addEventListener('change',syncSpeak);
   $('speak').addEventListener('change',event => chooseSpeak(speakChoiceFromValue(event.target.value)));
-  $('refresh-models').addEventListener('click',() => models().catch(report)); $('refresh-page').addEventListener('click',() => management().catch(report));
+  $('model').addEventListener('pointerdown',refreshModelsOnOpen); $('model').addEventListener('keydown',refreshModelsOnOpen);
+  $('refresh-page').addEventListener('click',() => management().catch(report));
   window.addEventListener('hashchange',() => management().catch(report));
   // On mobile the nav scrolls internally; browsers leave a partly hidden focused link where it
   // is, so bring it (and its focus ring, via scroll-padding) fully into view.
