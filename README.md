@@ -165,7 +165,8 @@ is answered as ordinary chat without tools. Expand route and agent details to
 inspect decisions and tool results.
 In the message field, Enter inserts a newline and Ctrl+Enter sends (same as Send).
 
-Attach images/audio as files. The microphone button left of the message field is
+Attach images/audio with the paperclip button below the microphone (it opens
+the file picker). The microphone button left of the message field is
 voice input: click to record, click again (or wait for the two-minute limit) to
 stop; the clip is transcribed via `/v1/audio/transcriptions` (Auto route) and the
 text is inserted at the cursor, never sent automatically. The button turns red

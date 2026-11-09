@@ -77,7 +77,7 @@ assert.doesNotMatch(design.replace(/:focus-visible \{[^}]*\}/, ''), /(^|[\s;{])o
 assert.match(design, /--control-height: 40px/);
 assert.match(design, /@media \(max-width: 760px\) \{\s*:root \{ --control-height: 44px; \}/);
 assert.match(design, /button:disabled \{ opacity: \.5; cursor: not-allowed; \}/);
-for (const selector of ['summary', 'input[type=file]::file-selector-button', 'label:has(> input[type=checkbox])'])
+for (const selector of ['summary', 'label:has(> input[type=checkbox])'])
   assert.match(block(selector), /min-height: var\(--control-height\)/, `${selector} target height`);
 
 // Component classes from plan section 5 (and their ID fallbacks) are styled.

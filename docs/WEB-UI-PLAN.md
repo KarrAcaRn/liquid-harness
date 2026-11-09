@@ -127,10 +127,10 @@ main                (view)
     #messages (flex: 1, scrolls internally)
     #approvals
     #composer
-      .composer-input: [mic button #record] textarea#prompt (fills the row) (+ label "Message" above)
+      .composer-input: .composer-tools column ([mic button #record] over [paperclip #attach → hidden #files]) textarea#prompt (fills the row) (+ label "Message" above)
       #attachments
       .composer-options: Model select (refreshes on open) | Speak replies (agent mode is always on, no toggle)
-      .composer-actions: [Attach images or audio] + hint "max 4 MiB per turn"   …   [Cancel][Send (primary)]
+      .composer-actions: …   [Cancel][Send (primary)]  + hint "max 4 MiB per turn"
       hint: request limit 6 MiB
     #run-status (status line directly above .composer-actions or composer)
     #speech-player

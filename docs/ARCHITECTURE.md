@@ -791,7 +791,7 @@ Target page structure, design rules and file ownership for the UI cleanup:
 ### Voice input
 
 The microphone button `#record` (icon only, `title`/`aria-label`
-"Sprachaufnahme") sits directly left of `#prompt` in `.composer-input`; the
+"Sprachaufnahme") sits directly left of `#prompt` in `.composer-input` (top of the `.composer-tools` column); the
 textarea takes the rest of the row at every width, the button is a square of
 `--control-height`. It is speech-to-text, not an attachment: the first click
 records with MediaRecorder (WebM/Ogg/MP4, at most 4 MiB and two minutes), the
@@ -799,7 +799,7 @@ second click (or a limit) stops; the clip goes as multipart `file` with
 `model=auto` to `POST /v1/audio/transcriptions` and the returned `text` is
 inserted at the textarea caret (a selection is replaced, separating spaces are
 added only where needed). Nothing is sent automatically. Audio for the model
-itself is still attached via the file picker.
+itself is attached with the paperclip button (see Attachments below).
 
 States (`micView()` in `app.mjs`, mirrored in `data-state`): `idle`;
 `recording` (`aria-pressed=true`, red filled button, pulsing icon unless
@@ -811,6 +811,17 @@ Manual check (real microphone, not covered by tests): open the UI on localhost,
 click the microphone, allow access, speak, click again; the button is red while
 recording, then dimmed, and the transcript appears at the cursor without being
 sent. Typing in the field works as before.
+
+### Attachments
+
+The paperclip button `#attach` (icon only, `title`/`aria-label` "Datei
+anhängen") sits directly below the microphone in the `.composer-tools` column
+left of `#prompt`; both share the square `.icon-button` sizing (on mobile the
+field is 6rem tall so it matches both stacked buttons). A click opens the hidden `<input id="files"
+type="file" multiple>`, whose `change` handler is the only attach path (encoding,
+8-file and 4 MiB limits, previews in `#attachments`). The picker accepts PNG,
+JPEG, GIF, WebP and audio (wav/mp3/flac/ogg/m4a/webm/mp4) only, because the
+chat API accepts no other attachment parts. Both are disabled while a turn runs.
 
 ### Options
 

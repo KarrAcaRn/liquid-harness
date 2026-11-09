@@ -237,10 +237,17 @@ assert.equal(agentFallback(failure(400,NOT_AGENT)),true);
 for (const other of [failure(409,'engine busy'),failure(400,'agent request accepts only model and messages'),failure(500,NOT_AGENT),new Error(NOT_AGENT),{status:400},null,undefined]) assert.equal(agentFallback(other),false);
 assert(readFileSync(fileURLToPath(new URL('../crates/lh-cli/src/server/agent_api.rs',import.meta.url)),'utf8').includes(`bad("${NOT_AGENT}")`),'fallback string matches the server error');
 assert.doesNotMatch(layout,/\.check\b/);
-// Voice input: one icon-only microphone button directly left of the message field, no old text button.
-assert.match(html,/<label for="prompt">Message<\/label><div class="composer-input"><button id="record" class="mic-button" type="button" title="Sprachaufnahme" aria-label="Sprachaufnahme" aria-pressed="false" data-state="idle"><svg class="mic-icon"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg><\/button><textarea id="prompt"[^>]*><\/textarea><\/div>/);
+// Composer input row: microphone (voice input) with the paperclip (attach) below it, then the message field.
+assert.match(html,/<label for="prompt">Message<\/label><div class="composer-input"><div class="composer-tools"><button id="record" class="mic-button icon-button" type="button" title="Sprachaufnahme" aria-label="Sprachaufnahme" aria-pressed="false" data-state="idle"><svg class="mic-icon button-icon"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg><\/button><button id="attach" class="icon-button" type="button" title="Datei anhängen" aria-label="Datei anhängen" aria-controls="files"><svg class="button-icon"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg><\/button><input id="files" type="file" accept="image\/png,image\/jpeg,image\/gif,image\/webp,audio\/\*,\.wav,\.mp3,\.flac,\.ogg,\.m4a,\.webm,\.mp4" multiple hidden tabindex="-1"><\/div><textarea id="prompt"[^>]*><\/textarea><\/div>/);
 assert.doesNotMatch(html,/Record audio|Stop recording/); assert.doesNotMatch(source,/Record audio|Stop recording/);
 assert.equal(html.match(/<button id="record"[^>]*>([\s\S]*?)<\/button>/)[1].replace(/<svg[\s\S]*<\/svg>/,'').trim(),'','microphone button shows only the icon');
+// The paperclip replaces the old "Attach images or audio" file label; it only opens the one hidden picker.
+assert.equal(html.match(/<button id="attach"[^>]*>([\s\S]*?)<\/button>/)[1].replace(/<svg[\s\S]*<\/svg>/,'').trim(),'','paperclip button shows only the icon');
+assert.doesNotMatch(html,/Attach images or audio|file-label|composer-media/); assert.doesNotMatch(layout + web('style.css'),/file-label|composer-media|file-selector-button/);
+assert.equal(html.match(/type="file"/g).length,1,'exactly one file input');
+assert.match(source,/\$\('attach'\)\.addEventListener\('click',\(\) => \$\('files'\)\.click\(\)\);/);
+assert.equal(source.match(/attach\(\[\.\.\./g).length,1,'one attach path (the picker change handler)');
+assert.match(source,/for \(const id of \[[^\]]*'files','attach','record'[^\]]*\]\) \$\(id\)\.disabled = value;/);
 assert.equal(MIC_LABEL,'Sprachaufnahme');
 assert.deepEqual(micView('idle'),{state:'idle',pressed:'false',busy:'false',disabled:false,title:'Sprachaufnahme'});
 assert.deepEqual(micView('recording'),{state:'recording',pressed:'true',busy:'false',disabled:false,title:'Sprachaufnahme beenden'});
@@ -297,11 +304,13 @@ assert.match(rule(layout,'.card-header .badges'),/min-width: 0;[^}]*max-width: 6
 assert.match(rule(mobile,'.conversation-item'),/max-width: min\(12\.5rem, 100%\)/);
 assert.match(rule(mobile,'#conversation-list'),/scroll-padding-inline: var\(--space-2, \.5rem\)/);
 assert.match(rule(mobile,'.app-nav'),/flex-wrap: nowrap; overflow-x: auto;[^}]*padding: 5px; margin: 0 -5px; scroll-padding-inline: 5px/);
-// and the native file input spilled past the 320 px gutter.
-assert.match(rule(layout,'.file-label'),/max-width: 100%; min-width: 0/);
-// The message field fills the row next to the fixed-size square microphone button at every width.
+// (The native file input that spilled past the 320 px gutter is gone: the paperclip opens a hidden picker.)
+// The message field fills the row next to the fixed-size square microphone and paperclip buttons at every width.
 assert.match(rule(layout,'.composer-input'),/display: flex/); assert.match(rule(layout,'.composer-input > #prompt'),/flex: 1 1 0; min-width: 0/);
-assert.match(rule(layout,'.mic-button'),/flex: 0 0 auto;[^}]*width: var\(--control-height, 40px\); height: var\(--control-height, 40px\)/);
+assert.match(rule(layout,'.icon-button'),/flex: 0 0 auto;[^}]*width: var\(--control-height, 40px\); height: var\(--control-height, 40px\)/);
+// The paperclip sits under the microphone; on mobile the field is as tall as both buttons (2 x 44 px + .5rem gap).
+assert.match(rule(layout,'.composer-tools'),/flex: 0 0 auto; display: flex; flex-direction: column; gap: var\(--space-2, \.5rem\)/);
+assert.match(rule(mobile,'#prompt'),/height: 6rem; min-height: 6rem/);
 // A pending approval card collapsed to 0 px (1024x768, mobile) or clipped its buttons (1366x900):
 // it must never shrink; #messages yields space instead, and the card is scrolled into view.
 assert.match(rule(layout,'#approvals'),/flex: 0 0 auto/);

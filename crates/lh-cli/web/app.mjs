@@ -386,7 +386,7 @@ function boot() {
     } finally { attachmentBusy = false; }
   }
   function busy(value) {
-    for (const id of ['send','new-chat','rename-chat','delete-chat','model','files','record','prompt']) $(id).disabled = value;
+    for (const id of ['send','new-chat','rename-chat','delete-chat','model','files','attach','record','prompt']) $(id).disabled = value;
     $('cancel').disabled = !value;
   }
   async function speak(text, id) {
@@ -604,6 +604,9 @@ function boot() {
   $('export').addEventListener('click',() => { const url = URL.createObjectURL(new Blob([JSON.stringify(conversations,null,2)],{type:'application/json'})); const a = el('a'); a.href = url; a.download = 'liquid-harness-conversations.json'; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); });
   $('auth-form').addEventListener('submit',event => { event.preventDefault(); token = $('token').value.trim(); try { sessionStorage.setItem('lh.token',token); notice('Token saved for this tab.', 'info'); } catch { storageWarning('Token remains in memory only: sessionStorage is unavailable.'); } models().catch(report); management().catch(report); });
   $('clear-token').addEventListener('click',() => { token = ''; $('token').value = ''; try { sessionStorage.removeItem('lh.token'); notice('Token cleared.', 'info'); } catch { storageWarning('Could not clear sessionStorage; close this tab to clear its stored token. In-memory token cleared.'); } });
+  // The paperclip opens the hidden file picker; its change handler stays the only attach path.
+  // Accepted types stay images and audio: the backend accepts no other attachment parts.
+  $('attach').addEventListener('click',() => $('files').click());
   $('files').addEventListener('change',async event => { try { await attach([...event.target.files]); } catch (error) { report(error); } finally { event.target.value = ''; } });
   function showMic(state) {
     const view = micView(state), mic = $('record');

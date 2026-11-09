@@ -82,17 +82,16 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
 
 #composer { display: flex; flex-direction: column; gap: var(--space-2, .5rem); flex-shrink: 0; padding-top: var(--space-3, .75rem); }
 #composer > label, #composer > p { margin: 0; }
-/* Microphone button left of the message field; the field takes the rest of the row at every width. */
+/* Microphone with the paperclip (attach) below it, left of the message field; the field takes the rest of the row at every width. */
 .composer-input { display: flex; align-items: flex-start; gap: var(--space-2, .5rem); min-width: 0; }
 .composer-input > #prompt { flex: 1 1 0; min-width: 0; }
-.mic-button { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: var(--control-height, 40px); height: var(--control-height, 40px); padding: 0; }
+.composer-tools { flex: 0 0 auto; display: flex; flex-direction: column; gap: var(--space-2, .5rem); }
+.icon-button { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: var(--control-height, 40px); height: var(--control-height, 40px); padding: 0; }
 /* Previews scroll inside a bounded box so the composer never pushes Send off-screen. */
 #attachments { display: flex; flex-wrap: wrap; gap: var(--space-3, .75rem); max-height: 8rem; overflow: auto; padding: var(--space-2, .5rem); }
 #attachments:empty { display: none; }
 .composer-options, .composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); }
-.composer-model, .composer-speak, .composer-media, .composer-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
-.file-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); max-width: 100%; min-width: 0; }
-.file-label input { display: inline-block; max-width: 100%; min-width: 0; }
+.composer-model, .composer-speak, .composer-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
 /* Send is the trailing control; Cancel sits directly before it. */
 .composer-submit { flex-wrap: nowrap; margin-left: auto; }
 #speech-player { flex-shrink: 0; }
@@ -173,13 +172,12 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
   .composer-speak select { flex: 1 1 auto; min-width: 0; }
   /* "Message" stays the textarea's accessible name; the placeholder labels it visually. */
   #composer > label[for=prompt] { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  #prompt { height: 4.5rem; min-height: 4.5rem; }
+  /* Tall enough for the stacked microphone and paperclip (2 x 44 px + gap). */
+  #prompt { height: 6rem; min-height: 6rem; }
   #attachments { max-height: 6rem; }
   /* Model select fills its own row next to its label. */
   .composer-model { flex-wrap: nowrap; width: 100%; }
   .composer-model select { flex: 1 1 auto; min-width: 0; }
   .conversation-header { flex-wrap: nowrap; }
   .conversation-header h2 { flex: 1 1 0; -webkit-line-clamp: 2; line-clamp: 2; }
-  /* The file picker shares the row with Cancel and Send (DOM order unchanged). */
-  .composer-media { display: contents; }
 }

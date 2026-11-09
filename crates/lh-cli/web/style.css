@@ -108,8 +108,9 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .button-quiet { background: transparent; border-color: transparent; color: var(--muted); }
 .button-quiet:hover:not(:disabled) { background: var(--hover); border-color: var(--line-strong); color: var(--text); }
 
-/* Microphone (voice input): icon-only secondary button; recording is red and filled, transcribing waits. */
-.mic-icon { display: block; width: 1.25rem; height: 1.25rem; }
+/* Icon-only secondary buttons next to the message field (paperclip, microphone). */
+.button-icon { display: block; width: 1.25rem; height: 1.25rem; }
+/* Microphone (voice input): recording is red and filled, transcribing waits. */
 .mic-button[data-state=recording], .mic-button[data-state=recording]:hover:not(:disabled) { background: var(--error); border-color: var(--error); color: var(--on-accent); }
 .mic-button[data-state=recording] .mic-icon { animation: mic-pulse 1.2s ease-in-out infinite; }
 .mic-button[data-state=transcribing] { cursor: progress; color: var(--muted); }
@@ -120,18 +121,8 @@ input[type=checkbox], input[type=radio] { width: 1.25rem; height: 1.25rem; margi
 /* Checkbox labels are the click target: give them the control height. */
 label:has(> input[type=checkbox]) { min-height: var(--control-height); cursor: pointer; }
 
-/* File input: native text stays (it reports the chosen files), the button looks like a secondary button. */
-input[type=file] { font-size: var(--font-size-s); color: var(--muted); max-width: 100%; border-radius: var(--radius-s); }
-input[type=file]::file-selector-button {
-  font: inherit; font-size: var(--font-size-s); font-weight: 500; color: var(--text); background: var(--panel);
-  min-height: var(--control-height); padding: var(--space-1) var(--space-3); margin-right: var(--space-2);
-  border: 1px solid var(--line-strong); border-radius: var(--radius-s); cursor: pointer;
-}
-input[type=file]:hover::file-selector-button { background: var(--hover); border-color: var(--accent); }
-
 /* Keyboard focus: one ring for every interactive element, in both themes. */
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-input[type=file]:focus-visible { outline-offset: 2px; }
 
 /* Disclosures: content-coloured, never as loud as the primary action. */
 details { margin: var(--space-2) 0; }
