@@ -788,6 +788,13 @@ and model context windows remain external limits. Verification: [M4c](M4C-RESULT
 Target page structure, design rules and file ownership for the UI cleanup:
 [WEB-UI-PLAN](WEB-UI-PLAN.md).
 
+### New conversation button
+
+`#new-chat` in `.sidebar-header` (next to the "Conversations" heading) is an
+icon-only "+" button (inline SVG, `title`/`aria-label` "New conversation") with
+the square `.icon-button` sizing of the composer tools. Its click handler is
+unchanged: `fresh()` (see Default context in conversations).
+
 ### Voice input
 
 The microphone button `#record` (icon only, `title`/`aria-label`
