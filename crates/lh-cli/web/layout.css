@@ -90,10 +90,15 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
 /* Previews scroll inside a bounded box so the composer never pushes Send off-screen. */
 #attachments { display: flex; flex-wrap: wrap; gap: var(--space-3, .75rem); max-height: 8rem; overflow: auto; padding: var(--space-2, .5rem); }
 #attachments:empty { display: none; }
-.composer-options, .composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); }
-.composer-model, .composer-speak, .composer-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
+/* One row: Model | Speak replies | … Cancel, Send. Above the mobile breakpoint the row
+   never wraps; the selects shrink instead so Cancel and Send stay level with Model and
+   Speak replies down to 761px. */
+.composer-options { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); }
+.composer-model, .composer-speak, .composer-submit { display: flex; flex-wrap: nowrap; align-items: center; gap: var(--space-2, .5rem); }
+.composer-model, .composer-speak { min-width: 0; }
+.composer-model select, .composer-speak select { flex: 1 1 auto; min-width: 4rem; }
 /* Send is the trailing control; Cancel sits directly before it. */
-.composer-submit { flex-wrap: nowrap; margin-left: auto; }
+.composer-submit { margin-left: auto; }
 #speech-player { flex-shrink: 0; }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); margin: var(--space-2, .5rem) 0; }
@@ -165,7 +170,8 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
   #messages { min-height: 120px; }
   /* Tighter rhythm so textarea and Send fit a 390x844 screen with 44px targets. */
   .chat-main, #composer { gap: var(--space-1, .25rem); }
-  .composer-options, .composer-actions { gap: var(--space-1, .25rem) var(--space-2, .5rem); }
+  /* Mobile: Model, Speak replies and Cancel/Send wrap onto their own rows. */
+  .composer-options { flex-wrap: wrap; gap: var(--space-1, .25rem) var(--space-2, .5rem); }
   .composer-speak { gap: var(--space-1, .25rem); }
   /* The speak select shrinks (long IDs truncate) instead of wrapping below its label. */
   .composer-speak { flex: 1 1 auto; flex-wrap: nowrap; min-width: 0; }

@@ -273,7 +273,10 @@ assert.doesNotMatch(recordHandler,/requestSubmit|send\(|attach\(/,'voice input n
 assert.match(recordHandler,/showMic\('recording'\)/); assert.match(recordHandler,/showMic\('transcribing'\)/); assert.match(recordHandler,/finally \{ transcribing = false; showMic\('idle'\); \}/);
 // Send is the last control of the composer action row, Cancel directly before it.
 assert.match(html,/<div class="composer-submit"><button id="cancel"[^>]*>Cancel<\/button><button id="send"[^>]*>Send<\/button><\/div><\/div>/);
-assert(html.indexOf('class="composer-options"') < html.indexOf('class="composer-actions"'));
+// Cancel and Send share one row with Model and Speak replies (inside .composer-options, after both).
+assert.match(html,/<div class="composer-options"><div class="composer-model">.*?<\/select><\/div><div class="composer-speak">.*?<\/select><\/div><div class="composer-submit">/);
+assert.doesNotMatch(html,/composer-actions/);
+assert.match(layout,/\n\.composer-options \{ display: flex; flex-wrap: nowrap;/);
 // The approval rule moved into each approval card; the composer hint keeps the limits.
 assert.doesNotMatch(html,/applies only to identical calls/); assert.match(source,/Agent approval “Always” applies only to identical calls in this run\./);
 assert.match(html,/Attachments: at most 4 MiB total per turn\. Full conversation requests must fit 6 MiB\./);

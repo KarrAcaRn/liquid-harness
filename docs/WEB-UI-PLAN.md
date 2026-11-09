@@ -129,10 +129,10 @@ main                (view)
     #composer
       .composer-input: .composer-tools column ([mic button #record] over [paperclip #attach → hidden #files]) textarea#prompt (fills the row) (+ label "Message" above)
       #attachments
-      .composer-options: Model select (refreshes on open) | Speak replies (agent mode is always on, no toggle)
-      .composer-actions: …   [Cancel][Send (primary)]  + hint "max 4 MiB per turn"
+      .composer-options (one row, controls vertically centred): Model select (refreshes on open) | Speak replies (agent mode is always on, no toggle) | …   .composer-submit [Cancel][Send (primary)]
+      hint: "max 4 MiB per turn"
       hint: request limit 6 MiB
-    #run-status (status line directly above .composer-actions or composer)
+    #run-status (status line directly above the composer)
     #speech-player
 ```
 - Send is the trailing (rightmost) control of the composer action row on all
