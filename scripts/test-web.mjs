@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel,newBinaryAvailable,aboutModels,restartedSince,modelOptions,opensSelect,singleFlight,micView,insertTranscript,MIC_LABEL} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel,newBinaryAvailable,aboutModels,restartedSince,modelOptions,opensSelect,singleFlight,micView,insertTranscript,MIC_LABEL,agentFallback,NOT_AGENT} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
@@ -213,7 +213,7 @@ const web = name => readFileSync(fileURLToPath(new URL(`../crates/lh-cli/web/${n
 const html = web('index.html'), layout = web('layout.css').replace(/\/\*[\s\S]*?\*\//g,'');
 assert(html.indexOf('href="/style.css"') >= 0 && html.indexOf('href="/style.css"') < html.indexOf('href="/layout.css"'),'layout.css loads after style.css');
 assert.doesNotMatch(html,/\sstyle=/,'no inline style attributes (CSP style-src self)');
-for (const id of ['composer','prompt','send','cancel','model','agent','speak','files','record','attachments','approvals','messages','run-status','chat-stats','conversation-list','conversation-title','new-chat','rename-chat','delete-chat','export','auth-form','token','clear-token','theme','notice','storage-warning','chat-page','management-page','page-title','page-status','refresh-page','management-content','speech-player'])
+for (const id of ['composer','prompt','send','cancel','model','speak','files','record','attachments','approvals','messages','run-status','chat-stats','conversation-list','conversation-title','new-chat','rename-chat','delete-chat','export','auth-form','token','clear-token','theme','notice','storage-warning','chat-page','management-page','page-title','page-status','refresh-page','management-content','speech-player'])
   assert.equal(html.split(`id="${id}"`).length,2,`exactly one #${id}`);
 assert.equal(html.match(/<h1[\s>]/g).length,1);
 const tag = id => html.match(new RegExp(`<[a-z]+ id="${id}"[^>]*>`))[0];
@@ -225,6 +225,18 @@ assert.match(html,/<div class="composer-model"><label for="model">Model<\/label>
 assert.match(source,/\$\('model'\)\.addEventListener\('pointerdown',refreshModelsOnOpen\); \$\('model'\)\.addEventListener\('keydown',refreshModelsOnOpen\);/);
 assert.match(source,/const models = singleFlight\(/);
 assert.match(html,/<button class="button-primary" type="submit">Save token<\/button>/);
+// Agent mode is always on: no toggle, every turn starts as an agent run (tools execute).
+assert.doesNotMatch(html,/id="agent"|Agent mode|execute tools|class="check"/i); assert.doesNotMatch(source,/\$\('agent'\)|'agent'\]/);
+assert.match(html,/<\/select><\/div><div class="composer-speak">/,'Speak replies directly follows Model');
+assert.match(source,/try \{ response = await api\('\/lh\/v1\/agent\/runs',\{value:payload,signal:run\.controller\.signal\}\); \}\n\s*catch \(error\) \{ if \(!agentFallback\(error\)\) throw error; run\.agent = false; response = await api\('\/v1\/chat\/completions',\{value:chatPayload,signal:run\.controller\.signal\}\); \}/);
+assert.match(source,/const run = \{controller:new AbortController\(\),id:null,agent:true,cancelled:false\}/);
+assert.equal(source.match(/\/lh\/v1\/agent\/runs',/g).length,1,'one agent run request site'); assert.equal(source.match(/'\/v1\/chat\/completions'/g).length,1,'chat only as the fallback');
+// Only the server's "not an agent" rejection falls back; every other failure is reported.
+const failure = (status,detail) => Object.assign(new Error(`HTTP ${status}: ${detail}`),{status,detail});
+assert.equal(agentFallback(failure(400,NOT_AGENT)),true);
+for (const other of [failure(409,'engine busy'),failure(400,'agent request accepts only model and messages'),failure(500,NOT_AGENT),new Error(NOT_AGENT),{status:400},null,undefined]) assert.equal(agentFallback(other),false);
+assert(readFileSync(fileURLToPath(new URL('../crates/lh-cli/src/server/agent_api.rs',import.meta.url)),'utf8').includes(`bad("${NOT_AGENT}")`),'fallback string matches the server error');
+assert.doesNotMatch(layout,/\.check\b/);
 // Voice input: one icon-only microphone button directly left of the message field, no old text button.
 assert.match(html,/<label for="prompt">Message<\/label><div class="composer-input"><button id="record" class="mic-button" type="button" title="Sprachaufnahme" aria-label="Sprachaufnahme" aria-pressed="false" data-state="idle"><svg class="mic-icon"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg><\/button><textarea id="prompt"[^>]*><\/textarea><\/div>/);
 assert.doesNotMatch(html,/Record audio|Stop recording/); assert.doesNotMatch(source,/Record audio|Stop recording/);

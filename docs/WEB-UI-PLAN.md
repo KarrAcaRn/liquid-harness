@@ -129,7 +129,7 @@ main                (view)
     #composer
       .composer-input: [mic button #record] textarea#prompt (fills the row) (+ label "Message" above)
       #attachments
-      .composer-options: Model select (refreshes on open) | Agent mode | Speak replies
+      .composer-options: Model select (refreshes on open) | Speak replies (agent mode is always on, no toggle)
       .composer-actions: [Attach images or audio] + hint "max 4 MiB per turn"   …   [Cancel][Send (primary)]
       hint: request limit 6 MiB
     #run-status (status line directly above .composer-actions or composer)
@@ -138,8 +138,9 @@ main                (view)
 - Send is the trailing (rightmost) control of the composer action row on all
   widths; Cancel sits immediately before it.
 - The approval "Always applies only to identical calls in this run" text moves
-  into each approval card (`approval()` in `app.mjs`); it may also stay as a
-  hint next to Agent mode. No text is dropped, only relocated.
+  into each approval card (`approval()` in `app.mjs`). No text is dropped, only
+  relocated. (The former Agent mode checkbox was removed later: chat always
+  runs as an agent run.)
 - Mobile: sidebar becomes a compact strip in unchanged DOM order – row 1
   heading + New conversation; row 2 the list as a single horizontally
   scrolling row; row 3 (or the end of row 2) Export as a quiet button; the

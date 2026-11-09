@@ -91,7 +91,6 @@ body[data-page=chat] > main { flex: 1 1 auto; min-height: 0; display: flex; flex
 #attachments:empty { display: none; }
 .composer-options, .composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem) var(--space-4, 1rem); }
 .composer-model, .composer-speak, .composer-media, .composer-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); }
-.check { display: inline-flex; align-items: center; gap: var(--space-2, .5rem); }
 .file-label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, .5rem); max-width: 100%; min-width: 0; }
 .file-label input { display: inline-block; max-width: 100%; min-width: 0; }
 /* Send is the trailing control; Cancel sits directly before it. */
@@ -168,7 +167,7 @@ dl.meta dd.wide { margin-bottom: var(--space-1, .25rem); }
   /* Tighter rhythm so textarea and Send fit a 390x844 screen with 44px targets. */
   .chat-main, #composer { gap: var(--space-1, .25rem); }
   .composer-options, .composer-actions { gap: var(--space-1, .25rem) var(--space-2, .5rem); }
-  .check, .composer-speak { gap: var(--space-1, .25rem); } /* lets Agent mode and Speak replies share a row at 390px */
+  .composer-speak { gap: var(--space-1, .25rem); }
   /* The speak select shrinks (long IDs truncate) instead of wrapping below its label. */
   .composer-speak { flex: 1 1 auto; flex-wrap: nowrap; min-width: 0; }
   .composer-speak select { flex: 1 1 auto; min-width: 0; }

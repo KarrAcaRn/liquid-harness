@@ -121,6 +121,14 @@ export function loadingLabel(model) {
   if (typeof model?.eta_ms === 'number' && model.eta_ms > 0) parts.push(`~${Math.ceil(model.eta_ms / 1000)} s left`);
   return parts.join(' ');
 }
+// Chat always runs in agent mode (docs/ARCHITECTURE.md "Web UI"): every turn is first
+// sent as an agent run, so tools execute (with approval). Only when the server rejects
+// that run because the routed specialist is not an agent (vision, transcription, plain
+// chat) does the turn fall back to ordinary streaming chat, which has no tools.
+export const NOT_AGENT = 'selected specialist is not an agent';
+export function agentFallback(error) {
+  return error?.status === 400 && typeof error.detail === 'string' && error.detail.includes(NOT_AGENT);
+}
 export function formatBytes(bytes) {
   if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return 'unknown';
   const units = ['B','KiB','MiB','GiB','TiB']; let value = bytes, unit = 0;
@@ -320,7 +328,8 @@ function boot() {
     if (!response.ok) {
       const raw = await response.text(); let message = raw;
       try { const error = JSON.parse(raw); message = error.error?.message || error.message || raw; } catch { /* Keep text errors. */ }
-      throw new Error(`HTTP ${response.status}${response.status === 409 ? ' — server busy or approval expired; retry after the active run finishes' : ''}: ${message}`);
+      const failure = new Error(`HTTP ${response.status}${response.status === 409 ? ' — server busy or approval expired; retry after the active run finishes' : ''}: ${message}`);
+      failure.status = response.status; failure.detail = message; throw failure;
     }
     return response;
   }
@@ -377,7 +386,7 @@ function boot() {
     } finally { attachmentBusy = false; }
   }
   function busy(value) {
-    for (const id of ['send','new-chat','rename-chat','delete-chat','model','agent','files','record','prompt']) $(id).disabled = value;
+    for (const id of ['send','new-chat','rename-chat','delete-chat','model','files','record','prompt']) $(id).disabled = value;
     $('cancel').disabled = !value;
   }
   async function speak(text, id) {
@@ -407,19 +416,23 @@ function boot() {
     notice('');
     if (attachmentBusy || voiceBusy()) { report(new Error('Finish loading attachments or voice input before sending.')); return; }
     const text = $('prompt').value.trim(); if (!text && !attachments.length) return;
-    const c = current(), agent = $('agent').checked;
+    const c = current();
     const user = {role:'user', content: attachments.length ? [...(text ? [{type:'text',text}] : []),...attachments.map(a => a.part)] : text};
     const history = [...(c.history || c.messages.filter(m => !m.error).map(({role,content}) => ({role,content}))), user];
     const context = conversationContext(c);
-    const payload = {model:$('model').value || 'auto',messages:requestMessages(context,history)}; if (!agent) { payload.stream = true; payload.lh_events = true; }
-    try { requestBody(payload); } catch (error) { report(error); return; }
+    const payload = {model:$('model').value || 'auto',messages:requestMessages(context,history)}, chatPayload = {...payload,stream:true,lh_events:true};
+    try { requestBody(chatPayload); } catch (error) { report(error); return; }
     const answer = {role:'assistant',content:'',events:[],pending:true,stats:startStats()}; c.messages.push(user,answer); c.history = history;
     if (c.title === 'New conversation') c.title = text.slice(0,60) || 'Media conversation';
-    const run = {controller:new AbortController(),id:null,agent,cancelled:false}; active = run;
+    const run = {controller:new AbortController(),id:null,agent:true,cancelled:false}; active = run;
     $('prompt').value = ''; attachments = []; renderAttachments(); busy(true); render(); persist(); $('run-status').textContent = 'Connecting…';
     let done = false, responseMessage = null, savedHistory = null, streamError = null, finalStats = null;
     try {
-      const response = await api(agent ? '/lh/v1/agent/runs' : '/v1/chat/completions',{value:payload,signal:run.controller.signal});
+      // Always an agent run first; a non-agent route falls back to tool-less streaming chat.
+      let response;
+      try { response = await api('/lh/v1/agent/runs',{value:payload,signal:run.controller.signal}); }
+      catch (error) { if (!agentFallback(error)) throw error; run.agent = false; response = await api('/v1/chat/completions',{value:chatPayload,signal:run.controller.signal}); }
+      const agent = run.agent;
       run.id = response.headers.get('x-lh-run-id');
       if (!response.headers.get('content-type')?.includes('text/event-stream')) throw new Error('Expected a server-sent event stream.');
       $('run-status').textContent = agent ? 'Agent running' : 'Receiving response…';

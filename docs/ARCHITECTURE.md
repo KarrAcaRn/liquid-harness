@@ -772,8 +772,15 @@ explicit storage-failure warnings and export. Streaming is parsed incrementally
 across UTF-8/chunk boundaries; incomplete answers are excluded from follow-up
 context. HTML is escaped before the deliberately small Markdown renderer emits
 markup; only HTTP(S) links without credentials are clickable, and remote Markdown
-images are never fetched. Agent mode is explicit, with approval controls and
-cancel; the existing server cancellation and approval boundaries are unchanged.
+images are never fetched. Chat always runs in agent mode (there is no toggle):
+every turn is sent to `POST /lh/v1/agent/runs`, so tools execute behind the
+approval controls and cancel. Only when that request is rejected with 400
+"selected specialist is not an agent" (the route chose a non-agent or non-chat
+specialist, e.g. vision or transcription) does the same turn fall back to
+streaming `/v1/chat/completions`, which executes no tools (`agentFallback` in
+`app.mjs`). For Auto route the fallback routes a second time (a route-cache hit
+when the cascade cache is enabled). The server
+cancellation and approval boundaries are unchanged.
 File/MediaRecorder inputs are bounded at 4 MiB per turn, complete JSON at 6 MiB.
 WebM/Ogg/MP4 conversion remains the backend's ffmpeg responsibility. Speech uses
 the binary WAV API and an audio player. Real hardware permissions, browser quota

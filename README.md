@@ -157,10 +157,12 @@ No Node build, CDN, internet connection or frontend package installation is need
 
 Chat stores conversations and attachments in this browser's localStorage. New,
 Rename, Delete and Export manage that local history; it is not server-side storage
-or encrypted storage. Select Auto route or a specialist. Agent mode explicitly
-enables tool execution with Allow/Deny/Always approvals and cancellation. Always
-means identical tool/arguments in this run only. Ordinary chat does not execute
-local tools. Expand route and agent details to inspect decisions and tool results.
+or encrypted storage. Select Auto route or a specialist. Chat always runs in
+agent mode: tools execute with Allow/Deny/Always approvals and cancellation.
+Always means identical tool/arguments in this run only. When the route picks a
+specialist that is not an agent (vision, transcription, plain chat), that turn
+is answered as ordinary chat without tools. Expand route and agent details to
+inspect decisions and tool results.
 In the message field, Enter inserts a newline and Ctrl+Enter sends (same as Send).
 
 Attach images/audio as files. The microphone button left of the message field is
@@ -191,7 +193,7 @@ The default `web` Cargo feature includes `server`. API-only build:
 
 Offline browser fixture after `cargo build --workspace`:
 `python3 scripts/web-smoke-server.py` (http://127.0.0.1:8485/; Ctrl-C to stop).
-Use `web-agent` with Agent mode for a scripted approval. JS checks run from Rust
+Select `web-agent` for a scripted approval. JS checks run from Rust
 tests if Node is installed, or directly with `node scripts/test-web.mjs`.
 See [M4c verification and limits](docs/M4C-RESULTS.md).
 
