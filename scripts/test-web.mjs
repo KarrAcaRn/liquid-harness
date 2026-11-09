@@ -3,7 +3,7 @@ import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {renderMarkdown} from '../crates/lh-cli/web/markdown.mjs';
-import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel,newBinaryAvailable,aboutModels,restartedSince,modelOptions,opensSelect,singleFlight} from '../crates/lh-cli/web/app.mjs';
+import {readSSE,requestBody,MAX_BODY,composerShortcut,speakIdsFor,resolveSpeakSelection,speakOptions,speakChoiceFromValue,SPEAK_NONE,newConversation,conversationContext,requestMessages,historyWithoutContext,loadingLabel,formatBytes,modelStateLabel,newBinaryAvailable,aboutModels,restartedSince,modelOptions,opensSelect,singleFlight,micView,insertTranscript,MIC_LABEL} from '../crates/lh-cli/web/app.mjs';
 import {normalizeStats,startStats,completeStats,endStats,restoreStats,latestStats,formatStats} from '../crates/lh-cli/web/stats.mjs';
 import {createSettings,DEFAULT_CONTEXT_KEY,SUGGESTED_DEFAULT_CONTEXT,MAX_DEFAULT_CONTEXT} from '../crates/lh-cli/web/settings.mjs';
 for (const name of ['app.mjs','markdown.mjs','stats.mjs','settings.mjs']) {
@@ -225,6 +225,30 @@ assert.match(html,/<div class="composer-model"><label for="model">Model<\/label>
 assert.match(source,/\$\('model'\)\.addEventListener\('pointerdown',refreshModelsOnOpen\); \$\('model'\)\.addEventListener\('keydown',refreshModelsOnOpen\);/);
 assert.match(source,/const models = singleFlight\(/);
 assert.match(html,/<button class="button-primary" type="submit">Save token<\/button>/);
+// Voice input: one icon-only microphone button directly left of the message field, no old text button.
+assert.match(html,/<label for="prompt">Message<\/label><div class="composer-input"><button id="record" class="mic-button" type="button" title="Sprachaufnahme" aria-label="Sprachaufnahme" aria-pressed="false" data-state="idle"><svg class="mic-icon"[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/svg><\/button><textarea id="prompt"[^>]*><\/textarea><\/div>/);
+assert.doesNotMatch(html,/Record audio|Stop recording/); assert.doesNotMatch(source,/Record audio|Stop recording/);
+assert.equal(html.match(/<button id="record"[^>]*>([\s\S]*?)<\/button>/)[1].replace(/<svg[\s\S]*<\/svg>/,'').trim(),'','microphone button shows only the icon');
+assert.equal(MIC_LABEL,'Sprachaufnahme');
+assert.deepEqual(micView('idle'),{state:'idle',pressed:'false',busy:'false',disabled:false,title:'Sprachaufnahme'});
+assert.deepEqual(micView('recording'),{state:'recording',pressed:'true',busy:'false',disabled:false,title:'Sprachaufnahme beenden'});
+assert.deepEqual(micView('transcribing'),{state:'transcribing',pressed:'false',busy:'true',disabled:true,title:'Sprachaufnahme wird erkannt…'});
+assert.equal(micView('bogus').state,'idle');
+assert.deepEqual(insertTranscript('','0','0','  Hallo Welt '),{value:'Hallo Welt',caret:10},'non-integer caret appends');
+assert.deepEqual(insertTranscript('',0,0,'Hallo'),{value:'Hallo',caret:5});
+assert.deepEqual(insertTranscript('Frage:',6,6,'wie spät'),{value:'Frage: wie spät',caret:15});
+assert.deepEqual(insertTranscript('ab',1,1,'X'),{value:'a X b',caret:4});
+assert.deepEqual(insertTranscript('a b',1,2,'X'),{value:'a X b',caret:4},'a selected space is replaced');
+assert.deepEqual(insertTranscript('alt neu',4,7,'frisch'),{value:'alt frisch',caret:10},'selection is replaced');
+assert.deepEqual(insertTranscript('text',99,99,'mehr'),{value:'text mehr',caret:9});
+for (const empty of ['',' \n',null,undefined,7]) assert.deepEqual(insertTranscript('abc',1,1,empty),{value:'abc',caret:1});
+// Wiring: multipart to the transcription API with auto routing, inserted into the field, never sent.
+assert.match(source,/form\.append\('model','auto'\); form\.append\('file',new File\(\[blob\]/);
+assert.match(source,/api\('\/v1\/audio\/transcriptions',\{form\}\)/);
+assert.match(source,/notice\(''\); insertIntoPrompt\(text\); \}/);
+const recordHandler = source.slice(source.indexOf("$('record').addEventListener"), source.indexOf("let theme;"));
+assert.doesNotMatch(recordHandler,/requestSubmit|send\(|attach\(/,'voice input never submits or attaches');
+assert.match(recordHandler,/showMic\('recording'\)/); assert.match(recordHandler,/showMic\('transcribing'\)/); assert.match(recordHandler,/finally \{ transcribing = false; showMic\('idle'\); \}/);
 // Send is the last control of the composer action row, Cancel directly before it.
 assert.match(html,/<div class="composer-submit"><button id="cancel"[^>]*>Cancel<\/button><button id="send"[^>]*>Send<\/button><\/div><\/div>/);
 assert(html.indexOf('class="composer-options"') < html.indexOf('class="composer-actions"'));
@@ -263,6 +287,9 @@ assert.match(rule(mobile,'#conversation-list'),/scroll-padding-inline: var\(--sp
 assert.match(rule(mobile,'.app-nav'),/flex-wrap: nowrap; overflow-x: auto;[^}]*padding: 5px; margin: 0 -5px; scroll-padding-inline: 5px/);
 // and the native file input spilled past the 320 px gutter.
 assert.match(rule(layout,'.file-label'),/max-width: 100%; min-width: 0/);
+// The message field fills the row next to the fixed-size square microphone button at every width.
+assert.match(rule(layout,'.composer-input'),/display: flex/); assert.match(rule(layout,'.composer-input > #prompt'),/flex: 1 1 0; min-width: 0/);
+assert.match(rule(layout,'.mic-button'),/flex: 0 0 auto;[^}]*width: var\(--control-height, 40px\); height: var\(--control-height, 40px\)/);
 // A pending approval card collapsed to 0 px (1024x768, mobile) or clipped its buttons (1366x900):
 // it must never shrink; #messages yields space instead, and the card is scrolled into view.
 assert.match(rule(layout,'#approvals'),/flex: 0 0 auto/);

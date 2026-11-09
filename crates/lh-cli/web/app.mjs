@@ -19,6 +19,27 @@ export function composerShortcut(event, form) {
   if (!event.repeat) form.requestSubmit();
   return true;
 }
+// Voice input (docs/ARCHITECTURE.md "Voice input"): the microphone button left of the
+// message field records, transcribes through /v1/audio/transcriptions and inserts the
+// text into the field; it never sends. idle -> recording -> transcribing -> idle.
+// aria-label stays fixed ("Sprachaufnahme"); aria-pressed and data-state carry the state.
+export const MIC_LABEL = 'Sprachaufnahme';
+export function micView(state) {
+  if (state === 'recording') return {state, pressed:'true', busy:'false', disabled:false, title:'Sprachaufnahme beenden'};
+  if (state === 'transcribing') return {state, pressed:'false', busy:'true', disabled:true, title:'Sprachaufnahme wird erkannt…'};
+  return {state:'idle', pressed:'false', busy:'false', disabled:false, title:MIC_LABEL};
+}
+// Inserts a transcript at the caret (replacing a selection), adding a separating space
+// only where it touches non-whitespace. Returns the new value and caret position.
+export function insertTranscript(value, start, end, transcript) {
+  const text = typeof transcript === 'string' ? transcript.trim() : '';
+  const from = Number.isInteger(start) ? Math.max(0, Math.min(start, value.length)) : value.length;
+  const to = Number.isInteger(end) ? Math.max(from, Math.min(end, value.length)) : from;
+  if (!text) return {value, caret:to};
+  const before = value.slice(0, from), after = value.slice(to);
+  const insert = `${before && !/\s$/.test(before) ? ' ' : ''}${text}${after && !/^\s/.test(after) ? ' ' : ''}`;
+  return {value:before + insert + after, caret:before.length + insert.length};
+}
 // Spoken replies (docs/ARCHITECTURE.md "Spoken replies"). The setting is one optional
 // speak ID (a `task = "speak"` specialist), never a hard-coded list: `/v1/models`
 // reports `speak_ids` per model. null means no automatic speech.
@@ -169,7 +190,8 @@ function boot() {
   // kind 'error' (default) for failures, 'info' for confirmations; style.css colours by data-kind.
   const notice = (text, kind = 'error') => { $('notice').textContent = text; $('notice').dataset.kind = kind; $('notice').hidden = !text; };
   const report = error => notice(error.message || String(error));
-  let storageBlocked = false, token = '', active = null, attachments = [], attachmentBusy = false, recorder = null, recordingTimer = null, recordingPending = false, speechURL = null;
+  let storageBlocked = false, token = '', active = null, attachments = [], attachmentBusy = false, recorder = null, recordingTimer = null, recordingPending = false, transcribing = false, speechURL = null;
+  const voiceBusy = () => Boolean(recorder || recordingPending || transcribing);
   let conversations = [], selected, pageVersion = 0, savedSnapshot = null;
   // Spoken replies: speakChoice is the optional speak ID (null = no automatic speech),
   // in memory per tab. Every page load starts with "<none>" (the #speak select has
@@ -218,7 +240,7 @@ function boot() {
   }
   const current = () => conversations.find(c => c.id === selected);
   function canChangeConversation() {
-    if (active || attachmentBusy || recorder || recordingPending) { report(new Error('Finish or cancel the response, attachment loading or recording before changing conversations.')); return false; }
+    if (active || attachmentBusy || voiceBusy()) { report(new Error('Finish or cancel the response, attachment loading or voice input before changing conversations.')); return false; }
     attachments = []; renderAttachments(); return true;
   }
   function fresh() {
@@ -288,11 +310,13 @@ function boot() {
     $('conversation-list').replaceChildren(...conversations.map(c => { const b = button(c.title, () => { if (!canChangeConversation()) return; selected = c.id; render(); }); b.className = c.id === selected ? 'conversation-item selected' : 'conversation-item'; b.setAttribute('aria-current',String(c.id === selected)); return b; }));
     renderMessages();
   }
-  async function api(path, { value, signal } = {}) {
+  async function api(path, { value, form, signal } = {}) {
     const headers = {};
     if (token) headers.Authorization = `Bearer ${token}`;
     if (value !== undefined) headers['Content-Type'] = 'application/json';
-    const response = await fetch(path, { method: value === undefined ? 'GET' : 'POST', headers, body: value === undefined ? undefined : requestBody(value), signal, credentials: 'same-origin' });
+    // A FormData body (multipart transcription) sets its own Content-Type boundary.
+    const body = form ?? (value === undefined ? undefined : requestBody(value));
+    const response = await fetch(path, { method: body === undefined ? 'GET' : 'POST', headers, body, signal, credentials: 'same-origin' });
     if (!response.ok) {
       const raw = await response.text(); let message = raw;
       try { const error = JSON.parse(raw); message = error.error?.message || error.message || raw; } catch { /* Keep text errors. */ }
@@ -381,7 +405,7 @@ function boot() {
   async function send(event) {
     event.preventDefault(); if (active) return;
     notice('');
-    if (attachmentBusy || recorder || recordingPending) { report(new Error('Finish loading or recording attachments before sending.')); return; }
+    if (attachmentBusy || voiceBusy()) { report(new Error('Finish loading attachments or voice input before sending.')); return; }
     const text = $('prompt').value.trim(); if (!text && !attachments.length) return;
     const c = current(), agent = $('agent').checked;
     const user = {role:'user', content: attachments.length ? [...(text ? [{type:'text',text}] : []),...attachments.map(a => a.part)] : text};
@@ -568,24 +592,46 @@ function boot() {
   $('auth-form').addEventListener('submit',event => { event.preventDefault(); token = $('token').value.trim(); try { sessionStorage.setItem('lh.token',token); notice('Token saved for this tab.', 'info'); } catch { storageWarning('Token remains in memory only: sessionStorage is unavailable.'); } models().catch(report); management().catch(report); });
   $('clear-token').addEventListener('click',() => { token = ''; $('token').value = ''; try { sessionStorage.removeItem('lh.token'); notice('Token cleared.', 'info'); } catch { storageWarning('Could not clear sessionStorage; close this tab to clear its stored token. In-memory token cleared.'); } });
   $('files').addEventListener('change',async event => { try { await attach([...event.target.files]); } catch (error) { report(error); } finally { event.target.value = ''; } });
+  function showMic(state) {
+    const view = micView(state), mic = $('record');
+    mic.dataset.state = view.state; mic.setAttribute('aria-pressed',view.pressed); mic.setAttribute('aria-busy',view.busy); mic.title = view.title;
+    mic.disabled = view.disabled || Boolean(active);
+  }
+  async function transcribe(blob, mime) {
+    const form = new FormData();
+    form.append('model','auto'); form.append('file',new File([blob],`recording.${mime.split('/')[1]}`,{type:mime}));
+    const result = await (await api('/v1/audio/transcriptions',{form})).json();
+    if (typeof result?.text !== 'string') throw new Error('Transcription returned no text.');
+    return result.text;
+  }
+  // Inserts at the caret the field had when the transcript arrived; never submits.
+  function insertIntoPrompt(text) {
+    const field = $('prompt'), next = insertTranscript(field.value, field.selectionStart, field.selectionEnd, text);
+    if (next.value === field.value) { notice('No speech recognised.', 'info'); return; }
+    field.value = next.value; field.focus(); field.setSelectionRange(next.caret, next.caret);
+  }
   $('record').addEventListener('click',async () => {
     if (recorder) { recorder.stop(); return; }
-    if (recordingPending) return;
+    if (recordingPending || transcribing) return;
     let stream; recordingPending = true;
     try {
-      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw new Error('Audio recording is unavailable. Use localhost/HTTPS and a supported browser, or upload audio.');
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') throw new Error('Voice input is unavailable. Use localhost/HTTPS and a supported browser, or type the message.');
       stream = await navigator.mediaDevices.getUserMedia({audio:true});
       const mime = ['audio/webm','audio/ogg','audio/mp4'].find(m => MediaRecorder.isTypeSupported(m));
-      if (!mime) throw new Error('No supported recording format. Upload an audio file instead.');
+      if (!mime) throw new Error('No supported recording format in this browser. Type the message instead.');
       recorder = new MediaRecorder(stream,{mimeType:mime}); const chunks = []; let size = 0, oversized = false;
       recorder.ondataavailable = event => { size += event.data.size; if (size > MAX_ATTACHMENTS) { oversized = true; if (recorder?.state === 'recording') recorder.stop(); } else chunks.push(event.data); };
       recorder.onerror = () => { report(new Error('Audio recording failed.')); if (recorder?.state === 'recording') recorder.stop(); };
       recorder.onstop = async () => {
-        clearTimeout(recordingTimer); stream.getTracks().forEach(t => t.stop()); recorder = null; $('record').textContent = 'Record audio';
-        try { if (oversized) throw new Error('Recording exceeded 4 MiB and was not attached. Record a shorter clip.'); await attach([new File(chunks,`recording.${mime.split('/')[1]}`,{type:mime})]); } catch (error) { report(error); }
+        clearTimeout(recordingTimer); stream.getTracks().forEach(t => t.stop()); recorder = null;
+        if (oversized || !chunks.length) { showMic('idle'); report(new Error(oversized ? 'Recording exceeded 4 MiB and was discarded. Record a shorter clip.' : 'Recording was empty.')); return; }
+        transcribing = true; showMic('transcribing'); notice('Transcribing recording…', 'info');
+        try { const text = await transcribe(new Blob(chunks,{type:mime}), mime); notice(''); insertIntoPrompt(text); }
+        catch (error) { report(error); }
+        finally { transcribing = false; showMic('idle'); }
       };
-      recorder.start(500); $('record').textContent = 'Stop recording'; recordingTimer = setTimeout(() => { if (recorder?.state === 'recording') { notice('Recording stopped at the two-minute limit.', 'info'); recorder.stop(); } },120000);
-    } catch (error) { stream?.getTracks().forEach(t => t.stop()); report(error); } finally { recordingPending = false; }
+      recorder.start(500); showMic('recording'); recordingTimer = setTimeout(() => { if (recorder?.state === 'recording') { notice('Recording stopped at the two-minute limit.', 'info'); recorder.stop(); } },120000);
+    } catch (error) { stream?.getTracks().forEach(t => t.stop()); recorder = null; showMic('idle'); report(error); } finally { recordingPending = false; }
   });
   let theme; try { theme = localStorage.getItem('lh.theme'); } catch { /* System theme is the fallback. */ }
   if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
@@ -618,7 +664,7 @@ function boot() {
     if (event.key !== DEFAULT_CONTEXT_KEY && event.key !== null) return;
     if (optionsDirty()) $('options-status').textContent = 'Changed in another tab. Saving here replaces that version.'; else loadOptions();
   });
-  window.addEventListener('beforeunload',event => { if (active || recorder || optionsDirty() || !$('storage-warning').hidden) { event.preventDefault(); event.returnValue = ''; } });
+  window.addEventListener('beforeunload',event => { if (active || voiceBusy() || optionsDirty() || !$('storage-warning').hidden) { event.preventDefault(); event.returnValue = ''; } });
   if (!conversations.length) fresh(); else { selected = conversations[0].id; render(); }
   models().catch(report); management().catch(report);
 }

@@ -45,7 +45,7 @@ const pairs = [
   ...['--bg', '--panel', '--hover', '--user-bg'].map(bg => ['--accent', bg, 4.5]),
   ...['--bg', '--panel', '--hover', '--error-bg'].map(bg => ['--error', bg, 4.5]),
   ['--ok', '--ok-bg', 4.5], ['--ok', '--panel', 4.5], ['--warn', '--warn-bg', 4.5], ['--warn', '--panel', 4.5],
-  ['--on-accent', '--accent', 4.5], ['--on-accent', '--accent-hover', 4.5],
+  ['--on-accent', '--accent', 4.5], ['--on-accent', '--accent-hover', 4.5], ['--on-accent', '--error', 3],
   ...['--bg', '--panel', '--user-bg', '--code', '--hover'].map(bg => ['--line-strong', bg, 3]),
   ...['--bg', '--panel', '--user-bg', '--code'].map(bg => ['--accent', bg, 3]),
   ['--error', '--panel', 3], ['--warn', '--panel', 3],
@@ -66,9 +66,9 @@ for (const m of design.matchAll(/(?:^|[\s;{])(margin|padding|gap)(?:-[a-z]+)?:\s
 // Font sizes only from the scale; never smaller than --font-size-s.
 for (const m of design.matchAll(/font-size:\s*([^;}]+)/g)) assert.match(m[1].trim(), /^var\(--font-size-(s|m|l|xl)\)$/, `font-size ${m[1]}`);
 
-// Single breakpoint; colour-scheme queries are themes, not breakpoints.
+// Single breakpoint; colour-scheme and reduced-motion queries are preferences, not breakpoints.
 const media = [...new Set([...css.matchAll(/@media\s*([^{]+)/g)].map(m => m[1].replace(/\s+/g, '')))];
-assert.deepEqual(media.filter(q => !q.includes('prefers-color-scheme')).sort(), ['(max-width:760px)']);
+assert.deepEqual(media.filter(q => !q.includes('prefers-color-scheme') && !q.includes('prefers-reduced-motion')).sort(), ['(max-width:760px)']);
 
 // Focus ring, target sizes, disabled state.
 assert.match(design, /:focus-visible \{ outline: 3px solid var\(--accent\); outline-offset: 2px; \}/);

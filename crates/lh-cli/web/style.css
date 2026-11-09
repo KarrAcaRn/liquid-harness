@@ -108,6 +108,14 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .button-quiet { background: transparent; border-color: transparent; color: var(--muted); }
 .button-quiet:hover:not(:disabled) { background: var(--hover); border-color: var(--line-strong); color: var(--text); }
 
+/* Microphone (voice input): icon-only secondary button; recording is red and filled, transcribing waits. */
+.mic-icon { display: block; width: 1.25rem; height: 1.25rem; }
+.mic-button[data-state=recording], .mic-button[data-state=recording]:hover:not(:disabled) { background: var(--error); border-color: var(--error); color: var(--on-accent); }
+.mic-button[data-state=recording] .mic-icon { animation: mic-pulse 1.2s ease-in-out infinite; }
+.mic-button[data-state=transcribing] { cursor: progress; color: var(--muted); }
+@keyframes mic-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .mic-button[data-state=recording] .mic-icon { animation: none; } }
+
 input[type=checkbox], input[type=radio] { width: 1.25rem; height: 1.25rem; margin: 0; accent-color: var(--accent); cursor: pointer; }
 /* Checkbox labels are the click target: give them the control height. */
 label:has(> input[type=checkbox]) { min-height: var(--control-height); cursor: pointer; }

@@ -781,6 +781,30 @@ and model context windows remain external limits. Verification: [M4c](M4C-RESULT
 Target page structure, design rules and file ownership for the UI cleanup:
 [WEB-UI-PLAN](WEB-UI-PLAN.md).
 
+### Voice input
+
+The microphone button `#record` (icon only, `title`/`aria-label`
+"Sprachaufnahme") sits directly left of `#prompt` in `.composer-input`; the
+textarea takes the rest of the row at every width, the button is a square of
+`--control-height`. It is speech-to-text, not an attachment: the first click
+records with MediaRecorder (WebM/Ogg/MP4, at most 4 MiB and two minutes), the
+second click (or a limit) stops; the clip goes as multipart `file` with
+`model=auto` to `POST /v1/audio/transcriptions` and the returned `text` is
+inserted at the textarea caret (a selection is replaced, separating spaces are
+added only where needed). Nothing is sent automatically. Audio for the model
+itself is still attached via the file picker.
+
+States (`micView()` in `app.mjs`, mirrored in `data-state`): `idle`;
+`recording` (`aria-pressed=true`, red filled button, pulsing icon unless
+`prefers-reduced-motion`); `transcribing` (disabled, `aria-busy=true`, info
+notice "Transcribing recording…"), then back to `idle`. Sending, switching
+conversations and unloading are blocked while recording or transcribing.
+
+Manual check (real microphone, not covered by tests): open the UI on localhost,
+click the microphone, allow access, speak, click again; the button is red while
+recording, then dimmed, and the transcript appears at the cursor without being
+sent. Typing in the field works as before.
+
 ### Options
 
 `#options` is a browser-local page (no server reads; `management()` only shows it
